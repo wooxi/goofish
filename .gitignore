@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm
+.cache/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Config (包含敏感信息)
+config/app_config.json
+config/*.json
+!config/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+htmlcov/
+.pytest_cache/
+
+# Vite
+dist/
+*.local
