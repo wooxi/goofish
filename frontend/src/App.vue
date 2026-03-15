@@ -234,11 +234,14 @@
         </el-card>
 
         <!-- 商品创建 -->
-        <el-card v-show="activeMenu === 'create'" class="panel-card">
+        <el-card v-show="activeMenu === 'create'" class="panel-card create-panel-card">
           <template #header>
             <div class="card-header">
               <span>➕ 商品创建</span>
-              <el-button text @click="resetCreateForm">重置</el-button>
+              <div class="header-actions">
+                <el-button text @click="fillCreateExample">示例填充（可选）</el-button>
+                <el-button text @click="resetCreateForm">重置</el-button>
+              </div>
             </div>
           </template>
 
@@ -250,121 +253,156 @@
             class="mb-4"
           />
 
-          <p class="op-tip">按接口最小必填字段提交；高级模式可追加扩展 JSON。</p>
+          <section class="create-guide">
+            <div class="create-guide-title">创建商品工作台</div>
+            <p>按 create 接口标准字段填写。左侧完成分块表单，右侧实时检查必填状态与字段约束，提交前可快速自检。</p>
+          </section>
 
-          <div class="required-hint">
-            <div class="hint-title">最小必填字段（create）</div>
-            <div class="hint-content">item_biz_type / sp_biz_type / channel_cat_id / price / express_fee / stock / publish_shop[0]</div>
-            <div class="hint-sub">关键约束：price / express_fee / stock 为整数；publish_shop.title 长度 1~60；content 长度 5~5000；images 数量 1~30 且不可重复。</div>
-          </div>
+          <div class="create-workspace">
+            <div class="create-main">
+              <el-form label-width="146px" class="compact-form panel-form create-form">
+                <section class="form-section create-block">
+                  <div class="section-title-row">
+                    <div class="section-title">基础信息</div>
+                    <span class="section-badge required">必填</span>
+                  </div>
+                  <div class="form-grid">
+                    <el-form-item class="key-field required-field" label="商品类型 item_biz_type" required>
+                      <el-select v-model="createForm.item_biz_type" placeholder="请选择" style="width: 100%">
+                        <el-option v-for="item in ITEM_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="行业类型 sp_biz_type" required>
+                      <el-select v-model="createForm.sp_biz_type" placeholder="请选择" style="width: 100%">
+                        <el-option v-for="item in SP_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="类目ID channel_cat_id" required>
+                      <el-input v-model.trim="createForm.channel_cat_id" placeholder="如：e11455..." />
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="售价 price(分)" required>
+                      <el-input-number v-model="createForm.price" :min="1" :max="9999999900" :step="1" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="运费 express_fee(分)" required>
+                      <el-input-number v-model="createForm.express_fee" :step="1" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="库存 stock" required>
+                      <el-input-number v-model="createForm.stock" :min="1" :max="399960" :step="1" style="width: 100%" />
+                    </el-form-item>
+                  </div>
+                </section>
 
-          <el-form label-width="140px" class="compact-form panel-form">
-            <section class="form-section">
-              <div class="section-title-row">
-                <div class="section-title">基础参数</div>
-                <span class="section-badge required">必填</span>
-              </div>
-              <div class="form-grid">
-                <el-form-item class="key-field" label="商品类型 item_biz_type" required>
-                  <el-select v-model="createForm.item_biz_type" placeholder="请选择" style="width: 100%">
-                    <el-option v-for="item in ITEM_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item class="key-field" label="行业类型 sp_biz_type" required>
-                  <el-select v-model="createForm.sp_biz_type" placeholder="请选择" style="width: 100%">
-                    <el-option v-for="item in SP_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item class="key-field" label="类目ID channel_cat_id" required>
-                  <el-input v-model.trim="createForm.channel_cat_id" placeholder="如：e11455..." />
-                </el-form-item>
-                <el-form-item class="key-field" label="售价 price(分)" required>
-                  <el-input-number v-model="createForm.price" :min="1" :max="9999999900" :step="1" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="运费 express_fee(分)" required>
-                  <el-input-number v-model="createForm.express_fee" :step="1" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="库存 stock" required>
-                  <el-input-number v-model="createForm.stock" :min="1" :max="399960" :step="1" style="width: 100%" />
-                </el-form-item>
-              </div>
-            </section>
+                <section class="form-section create-block">
+                  <div class="section-title-row">
+                    <div class="section-title">发布店铺</div>
+                    <span class="section-badge required">必填</span>
+                  </div>
+                  <div class="form-grid">
+                    <el-form-item class="key-field required-field" label="闲鱼会员名 user_name" required>
+                      <el-input v-model.trim="createForm.publish_shop.user_name" placeholder="tbxxxx" />
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="发货省 province" required>
+                      <el-input-number v-model="createForm.publish_shop.province" :step="1" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="发货市 city" required>
+                      <el-input-number v-model="createForm.publish_shop.city" :step="1" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="发货区 district" required>
+                      <el-input-number v-model="createForm.publish_shop.district" :step="1" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item class="key-field required-field" label="标题 title" required>
+                      <el-input v-model.trim="createForm.publish_shop.title" maxlength="60" show-word-limit />
+                    </el-form-item>
+                  </div>
+                </section>
 
-            <section class="form-section">
-              <div class="section-title-row">
-                <div class="section-title">发布店铺信息 publish_shop[0]</div>
-                <span class="section-badge required">必填</span>
-              </div>
-              <div class="form-grid">
-                <el-form-item class="key-field" label="闲鱼会员名 user_name" required>
-                  <el-input v-model.trim="createForm.publish_shop.user_name" placeholder="tbxxxx" />
-                </el-form-item>
-                <el-form-item label="发货省 province" required>
-                  <el-input-number v-model="createForm.publish_shop.province" :step="1" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="发货市 city" required>
-                  <el-input-number v-model="createForm.publish_shop.city" :step="1" style="width: 100%" />
-                </el-form-item>
-                <el-form-item label="发货区 district" required>
-                  <el-input-number v-model="createForm.publish_shop.district" :step="1" style="width: 100%" />
-                </el-form-item>
-                <el-form-item class="key-field" label="标题 title" required>
-                  <el-input v-model.trim="createForm.publish_shop.title" maxlength="60" show-word-limit />
-                </el-form-item>
-              </div>
-              <el-form-item class="key-field" label="描述 content" required>
-                <el-input v-model="createForm.publish_shop.content" type="textarea" :rows="4" maxlength="5000" show-word-limit />
-              </el-form-item>
-              <el-form-item class="key-field" label="图片 URLs" required>
-                <el-input
-                  v-model="createForm.publish_shop.images_text"
-                  type="textarea"
-                  :rows="4"
-                  placeholder="每行一个 URL（或逗号分隔）"
-                />
-              </el-form-item>
-            </section>
-
-            <section class="form-section subtle">
-              <el-collapse v-model="createOptionalPanels" class="optional-collapse">
-                <el-collapse-item name="advanced">
-                  <template #title>
-                    <div class="collapse-title-row">
-                      <span class="section-title">扩展参数（可选）</span>
-                      <span class="section-badge optional">默认收起</span>
-                    </div>
-                  </template>
-                  <el-form-item label="高级模式">
-                    <el-switch v-model="createAdvancedEnabled" />
-                    <span class="switch-tip">附加扩展 JSON（可选）</span>
+                <section class="form-section create-block">
+                  <div class="section-title-row">
+                    <div class="section-title">图片与描述</div>
+                    <span class="section-badge required">必填</span>
+                  </div>
+                  <el-form-item class="key-field required-field" label="描述 content" required>
+                    <el-input v-model="createForm.publish_shop.content" type="textarea" :rows="4" maxlength="5000" show-word-limit />
                   </el-form-item>
-                  <el-form-item v-if="createAdvancedEnabled" label="扩展 JSON">
+                  <el-form-item class="key-field required-field" label="图片 URLs" required>
                     <el-input
-                      v-model="createAdvancedJson"
+                      v-model="createForm.publish_shop.images_text"
                       type="textarea"
-                      :rows="8"
-                      class="json-input"
-                      placeholder='例如：{"channel_pv":[...],"outer_id":"123"}'
+                      :rows="4"
+                      placeholder="每行一个 URL（或逗号分隔）"
                     />
+                    <div class="field-meta">当前解析图片：{{ createImages.length }} 张</div>
                   </el-form-item>
-                </el-collapse-item>
-              </el-collapse>
-            </section>
-          </el-form>
+                </section>
 
-          <div class="op-actions">
-            <el-button type="primary" @click="createProduct" :loading="creatingProduct">➕ 创建商品</el-button>
-          </div>
-          <el-alert
-            v-if="createProductError"
-            :title="createProductError"
-            type="error"
-            show-icon
-            closable
-            class="mb-4"
-          />
-          <div v-if="createProductResult" class="json-result">
-            <pre>{{ createProductResult }}</pre>
+                <section class="form-section subtle create-block">
+                  <el-collapse v-model="createOptionalPanels" class="optional-collapse">
+                    <el-collapse-item name="advanced">
+                      <template #title>
+                        <div class="collapse-title-row">
+                          <span class="section-title">可选高级参数</span>
+                          <span class="section-badge optional">默认收起</span>
+                        </div>
+                      </template>
+                      <el-form-item label="高级模式">
+                        <el-switch v-model="createAdvancedEnabled" />
+                        <span class="switch-tip">附加扩展 JSON（可选）</span>
+                      </el-form-item>
+                      <el-form-item v-if="createAdvancedEnabled" label="扩展 JSON">
+                        <el-input
+                          v-model="createAdvancedJson"
+                          type="textarea"
+                          :rows="8"
+                          class="json-input"
+                          placeholder='例如：{"channel_pv":[...],"outer_id":"123"}'
+                        />
+                      </el-form-item>
+                    </el-collapse-item>
+                  </el-collapse>
+                </section>
+              </el-form>
+
+              <div class="op-actions create-actions">
+                <el-button type="primary" @click="createProduct" :loading="creatingProduct">➕ 创建商品</el-button>
+              </div>
+
+              <el-alert
+                v-if="createProductError"
+                :title="createProductError"
+                type="error"
+                show-icon
+                closable
+                class="mb-4"
+              />
+              <div v-if="createProductResult" class="json-result">
+                <pre>{{ createProductResult }}</pre>
+              </div>
+            </div>
+
+            <aside class="create-check-card">
+              <div class="create-check-header">提交前检查</div>
+              <div class="create-check-sub">必填状态与关键规则实时校验（提交时仍以接口校验为准）</div>
+
+              <ul class="create-check-list">
+                <li
+                  v-for="item in createChecklist"
+                  :key="item.key"
+                  class="create-check-item"
+                  :class="item.ok ? 'is-ok' : 'is-pending'"
+                >
+                  <div class="item-title">{{ item.label }}</div>
+                  <div class="item-status">{{ item.ok ? '已完成' : '待完善' }}</div>
+                  <p class="item-hint">{{ item.hint }}</p>
+                </li>
+              </ul>
+
+              <div class="create-constraint-box">
+                <div class="constraint-title">字段约束提示</div>
+                <ul>
+                  <li v-for="tip in CREATE_CONSTRAINT_TIPS" :key="tip">{{ tip }}</li>
+                </ul>
+              </div>
+            </aside>
           </div>
         </el-card>
 
@@ -543,6 +581,13 @@ const SP_BIZ_TYPE_OPTIONS = [
   1, 2, 3, 8, 9, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 33, 99,
 ].map((value) => ({ value, label: String(value) }))
 
+const CREATE_CONSTRAINT_TIPS = [
+  'price / express_fee / stock 必须为整数。',
+  'publish_shop.title 长度需为 1~60。',
+  'publish_shop.content 长度需为 5~5000。',
+  'publish_shop.images 数量需为 1~30，且不可重复。',
+]
+
 const MENU_META = {
   config: { title: 'API 配置', desc: '配置 appid / appsecret / seller_id，作为全部功能的基础。' },
   shops: { title: '店铺信息查询', desc: '查询店铺授权与状态信息。' },
@@ -657,6 +702,87 @@ const createProductError = ref('')
 const publishProductError = ref('')
 const createProductResult = ref('')
 const publishProductResult = ref('')
+
+const createImages = computed(() => parseImages(createForm.publish_shop.images_text))
+
+const createAdvancedJsonValid = computed(() => {
+  if (!createAdvancedEnabled.value) return true
+  const text = (createAdvancedJson.value || '').trim()
+  if (!text) return false
+  try {
+    const parsed = JSON.parse(text)
+    return isPlainObject(parsed)
+  } catch {
+    return false
+  }
+})
+
+const createChecklist = computed(() => {
+  const shop = createForm.publish_shop
+
+  const basicOk =
+    ITEM_BIZ_TYPE_OPTIONS.some((item) => item.value === createForm.item_biz_type) &&
+    SP_BIZ_TYPE_OPTIONS.some((item) => item.value === createForm.sp_biz_type) &&
+    Boolean(createForm.channel_cat_id) &&
+    isInteger(createForm.price) &&
+    createForm.price >= 1 &&
+    createForm.price <= 9999999900 &&
+    isInteger(createForm.express_fee) &&
+    isInteger(createForm.stock) &&
+    createForm.stock >= 1 &&
+    createForm.stock <= 399960
+
+  const shopOk =
+    Boolean(shop.user_name) &&
+    isInteger(shop.province) &&
+    isInteger(shop.city) &&
+    isInteger(shop.district)
+
+  const textOk =
+    Boolean(shop.title) &&
+    shop.title.length <= 60 &&
+    Boolean(shop.content) &&
+    shop.content.length >= 5 &&
+    shop.content.length <= 5000
+
+  const imagesOk =
+    createImages.value.length >= 1 &&
+    createImages.value.length <= 30 &&
+    new Set(createImages.value).size === createImages.value.length
+
+  return [
+    {
+      key: 'basic',
+      label: '基础参数完整',
+      ok: basicOk,
+      hint: 'item_biz_type / sp_biz_type / channel_cat_id / price / express_fee / stock',
+    },
+    {
+      key: 'shop',
+      label: '发布店铺信息完整',
+      ok: shopOk,
+      hint: 'publish_shop.user_name + province/city/district',
+    },
+    {
+      key: 'content',
+      label: '标题与描述符合规则',
+      ok: textOk,
+      hint: `title ${shop.title?.length || 0}/60，content ${shop.content?.length || 0}/5000`,
+    },
+    {
+      key: 'images',
+      label: '图片数量与去重校验',
+      ok: imagesOk,
+      hint: `已解析 ${createImages.value.length} 张，要求 1~30 且不能重复`,
+    },
+    {
+      key: 'advanced',
+      label: '高级 JSON 配置合法',
+      ok: createAdvancedJsonValid.value,
+      hint: createAdvancedEnabled.value ? '已启用高级模式，JSON 必须为对象' : '未启用高级模式，可忽略',
+    },
+  ]
+})
 
 // 回调记录
 const callbackRecords = ref([])
@@ -1025,6 +1151,33 @@ function formatApiResult(result) {
   return JSON.stringify(result, null, 2)
 }
 
+function fillCreateExample() {
+  createForm.item_biz_type = 2
+  createForm.sp_biz_type = 1
+  createForm.channel_cat_id = 'e11455'
+  createForm.price = 19900
+  createForm.express_fee = 0
+  createForm.stock = 5
+
+  createForm.publish_shop.user_name = 'tb_demo_shop'
+  createForm.publish_shop.province = 330000
+  createForm.publish_shop.city = 330100
+  createForm.publish_shop.district = 330106
+  createForm.publish_shop.title = '九成新演示商品（请先改成你的真实信息）'
+  createForm.publish_shop.content = '演示填充：功能联调用文案，提交前请替换为真实商品描述。'
+  createForm.publish_shop.images_text = [
+    'https://via.placeholder.com/1200x1200.png?text=goofish-demo-1',
+    'https://via.placeholder.com/1200x1200.png?text=goofish-demo-2',
+  ].join('\n')
+
+  createAdvancedEnabled.value = false
+  createAdvancedJson.value = '{}'
+  createOptionalPanels.value = []
+  createProductError.value = ''
+  createProductResult.value = ''
+  ElMessage.success('已填充演示示例（未提交）')
+}
+
 function resetCreateForm() {
   Object.assign(createForm, getDefaultCreateForm())
   createAdvancedEnabled.value = false
@@ -1385,6 +1538,156 @@ body {
   background: #f8fafc;
 }
 
+.create-guide {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: linear-gradient(95deg, #eff6ff 0%, #f8fafc 55%, #ffffff 100%);
+}
+
+.create-guide-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 6px;
+}
+
+.create-guide p {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.create-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+  align-items: start;
+}
+
+.create-main {
+  min-width: 0;
+}
+
+.create-block {
+  border-color: #dbeafe;
+  background: #fff;
+}
+
+.required-field {
+  border-left: 3px solid #3b82f6;
+  padding-left: 8px;
+  border-radius: 4px;
+}
+
+.field-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.create-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.create-check-card {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px;
+  position: sticky;
+  top: 12px;
+}
+
+.create-check-header {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.create-check-sub {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.create-check-list {
+  list-style: none;
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.create-check-item {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.create-check-item .item-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.create-check-item .item-status {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.create-check-item .item-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.create-check-item.is-ok {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.create-check-item.is-ok .item-title,
+.create-check-item.is-ok .item-status {
+  color: #166534;
+}
+
+.create-check-item.is-pending {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.create-check-item.is-pending .item-title,
+.create-check-item.is-pending .item-status {
+  color: #991b1b;
+}
+
+.create-constraint-box {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.constraint-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.create-constraint-box ul {
+  margin-top: 8px;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .section-title-row {
   display: flex;
   align-items: center;
@@ -1695,6 +1998,20 @@ body {
   .publish-grid {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .create-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .create-check-card {
+    position: static;
+    top: auto;
+  }
+
+  .required-field {
+    border-left-width: 2px;
+    padding-left: 6px;
   }
 
   .compact-form .el-form-item {
