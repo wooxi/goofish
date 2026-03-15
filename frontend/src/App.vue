@@ -38,6 +38,15 @@
             </div>
           </template>
 
+          <el-alert
+            v-if="configLoadedFromBackend"
+            :title="`已自动读取后端配置：appid=${config.appid || '-'}，${hasSavedSecret ? 'AppSecret 已保存' : 'AppSecret 未保存'}`"
+            type="success"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
           <el-form :model="config" label-width="140px" size="large" class="panel-form">
             <el-form-item label="AppKey (appid)" required>
               <el-input v-model="config.appid" placeholder="请输入 appid" type="number" />
@@ -154,7 +163,10 @@
           <template #header>
             <div class="card-header">
               <span>📦 商品列表查询</span>
-              <el-button type="success" @click="queryProducts" :loading="queryingProducts">🔍 查询商品</el-button>
+              <div class="header-actions">
+                <el-button type="success" @click="queryProducts" :loading="queryingProducts">🔍 查询商品</el-button>
+                <el-button @click="refreshProducts" :loading="queryingProducts" :disabled="!configReady">🔄 重新获取</el-button>
+              </div>
             </div>
           </template>
 
@@ -175,6 +187,15 @@
             class="mb-4"
           />
 
+          <el-alert
+            v-if="productsRestoredAt"
+            :title="`已恢复上次查询结果（查询时间：${productsRestoredAt}）`"
+            type="info"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
           <div v-if="products.length > 0" class="products-list">
             <div class="result-info">
               <span>✅ 查询成功，共 <strong>{{ products.length }}</strong> 条记录</span>
@@ -184,6 +205,7 @@
                 <span>每页 {{ pagination.page_size }} 条</span>
               </div>
               <span v-if="productsQueryTime">⏱️ 耗时：{{ productsQueryTime }}</span>
+              <span v-if="productsFetchedAt">🕒 查询时间：{{ productsFetchedAt }}</span>
             </div>
 
             <div class="table-scroll">
@@ -229,6 +251,12 @@
           />
 
           <p class="op-tip">按接口最小必填字段提交；高级模式可追加扩展 JSON。</p>
+
+          <div class="required-hint">
+            <div class="hint-title">最小必填字段（create）</div>
+            <div class="hint-content">item_biz_type / sp_biz_type / channel_cat_id / price / express_fee / stock / publish_shop[0]</div>
+            <div class="hint-sub">关键约束：price / express_fee / stock 为整数；publish_shop.title 长度 1~60；content 长度 5~5000；images 数量 1~30 且不可重复。</div>
+          </div>
 
           <el-form label-width="140px" class="compact-form panel-form">
             <section class="form-section">
@@ -298,23 +326,29 @@
             </section>
 
             <section class="form-section subtle">
-              <div class="section-title-row">
-                <div class="section-title">扩展参数</div>
-                <span class="section-badge optional">可选</span>
-              </div>
-              <el-form-item label="高级模式">
-                <el-switch v-model="createAdvancedEnabled" />
-                <span class="switch-tip">附加扩展 JSON（可选）</span>
-              </el-form-item>
-              <el-form-item v-if="createAdvancedEnabled" label="扩展 JSON">
-                <el-input
-                  v-model="createAdvancedJson"
-                  type="textarea"
-                  :rows="8"
-                  class="json-input"
-                  placeholder='例如：{"channel_pv":[...],"outer_id":"123"}'
-                />
-              </el-form-item>
+              <el-collapse v-model="createOptionalPanels" class="optional-collapse">
+                <el-collapse-item name="advanced">
+                  <template #title>
+                    <div class="collapse-title-row">
+                      <span class="section-title">扩展参数（可选）</span>
+                      <span class="section-badge optional">默认收起</span>
+                    </div>
+                  </template>
+                  <el-form-item label="高级模式">
+                    <el-switch v-model="createAdvancedEnabled" />
+                    <span class="switch-tip">附加扩展 JSON（可选）</span>
+                  </el-form-item>
+                  <el-form-item v-if="createAdvancedEnabled" label="扩展 JSON">
+                    <el-input
+                      v-model="createAdvancedJson"
+                      type="textarea"
+                      :rows="8"
+                      class="json-input"
+                      placeholder='例如：{"channel_pv":[...],"outer_id":"123"}'
+                    />
+                  </el-form-item>
+                </el-collapse-item>
+              </el-collapse>
             </section>
           </el-form>
 
@@ -353,6 +387,12 @@
 
           <p class="op-tip">按接口最小必填字段提交；接口为异步处理，结果看回调状态页。</p>
 
+          <div class="required-hint">
+            <div class="hint-title">最小必填字段（publish）</div>
+            <div class="hint-content">product_id + user_name（数组）</div>
+            <div class="hint-sub">当前页面输入单个 user_name，提交时自动按接口规范转换为 user_name: ["..."]。</div>
+          </div>
+
           <el-form label-width="140px" class="compact-form panel-form">
             <section class="form-section">
               <div class="section-title-row">
@@ -370,38 +410,45 @@
             </section>
 
             <section class="form-section subtle">
-              <div class="section-title-row">
-                <div class="section-title">扩展设置</div>
-                <span class="section-badge optional">可选</span>
-              </div>
-              <div class="form-grid publish-grid">
-                <el-form-item label="定时上架时间">
-                  <el-input
-                    v-model.trim="publishForm.specify_publish_time"
-                    placeholder="可选，如：2026-03-14 12:30:00"
-                  />
-                </el-form-item>
-                <el-form-item label="回调地址 notify_url">
-                  <el-input
-                    v-model.trim="publishForm.notify_url"
-                    placeholder="可选，建议填写后端回调接收地址"
-                  />
-                </el-form-item>
-              </div>
+              <el-collapse v-model="publishOptionalPanels" class="optional-collapse">
+                <el-collapse-item name="advanced">
+                  <template #title>
+                    <div class="collapse-title-row">
+                      <span class="section-title">扩展设置（可选）</span>
+                      <span class="section-badge optional">默认收起</span>
+                    </div>
+                  </template>
 
-              <el-form-item label="高级模式">
-                <el-switch v-model="publishAdvancedEnabled" />
-                <span class="switch-tip">附加扩展 JSON（可选）</span>
-              </el-form-item>
-              <el-form-item v-if="publishAdvancedEnabled" label="扩展 JSON">
-                <el-input
-                  v-model="publishAdvancedJson"
-                  type="textarea"
-                  :rows="8"
-                  class="json-input"
-                  placeholder='例如：{"notify_url":"https://xxx/callback"}'
-                />
-              </el-form-item>
+                  <div class="form-grid publish-grid">
+                    <el-form-item label="定时上架时间">
+                      <el-input
+                        v-model.trim="publishForm.specify_publish_time"
+                        placeholder="可选，如：2026-03-14 12:30:00"
+                      />
+                    </el-form-item>
+                    <el-form-item label="回调地址 notify_url">
+                      <el-input
+                        v-model.trim="publishForm.notify_url"
+                        placeholder="可选，建议填写后端回调接收地址"
+                      />
+                    </el-form-item>
+                  </div>
+
+                  <el-form-item label="高级模式">
+                    <el-switch v-model="publishAdvancedEnabled" />
+                    <span class="switch-tip">附加扩展 JSON（可选）</span>
+                  </el-form-item>
+                  <el-form-item v-if="publishAdvancedEnabled" label="扩展 JSON">
+                    <el-input
+                      v-model="publishAdvancedJson"
+                      type="textarea"
+                      :rows="8"
+                      class="json-input"
+                      placeholder='例如：{"notify_url":"https://xxx/callback"}'
+                    />
+                  </el-form-item>
+                </el-collapse-item>
+              </el-collapse>
             </section>
           </el-form>
 
@@ -478,6 +525,8 @@ import { ElMessage } from 'element-plus'
 const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8001'
   : `http://${window.location.hostname}:8001`
+
+const PRODUCT_QUERY_CACHE_KEY = 'goofish:products-query-cache:v1'
 
 const ITEM_BIZ_TYPE_OPTIONS = [
   { value: 2, label: '2 - 普通商品' },
@@ -560,6 +609,7 @@ const config = reactive({
 })
 
 const hasSavedSecret = ref(false)
+const configLoadedFromBackend = ref(false)
 const configReady = computed(() => {
   const appidReady = Boolean(config.appid)
   const secretReady = hasSavedSecret.value || Boolean((config.appsecret || '').trim())
@@ -582,6 +632,8 @@ const products = ref([])
 const productsQueried = ref(false)
 const productsError = ref('')
 const productsQueryTime = ref('')
+const productsFetchedAt = ref('')
+const productsRestoredAt = ref('')
 const pagination = reactive({
   count: 0,
   page_no: 1,
@@ -596,6 +648,8 @@ const createAdvancedEnabled = ref(false)
 const publishAdvancedEnabled = ref(false)
 const createAdvancedJson = ref('{}')
 const publishAdvancedJson = ref('{}')
+const createOptionalPanels = ref([])
+const publishOptionalPanels = ref([])
 
 const creatingProduct = ref(false)
 const publishingProduct = ref(false)
@@ -616,6 +670,7 @@ onMounted(async () => {
 
   await checkBackend()
   await loadConfig()
+  restoreProductsCache()
   await loadCallbackRecords(true)
   callbackTimer = setInterval(() => {
     loadCallbackRecords(true)
@@ -647,6 +702,8 @@ async function loadConfig() {
     const res = await fetch(`${API_BASE}/api/config`)
     const data = await res.json()
     hasSavedSecret.value = Boolean(data.has_secret)
+    configLoadedFromBackend.value = Boolean(data.appid || data.has_secret || data.seller_id || data.updated_at)
+
     if (data.appid && data.appid !== 0) {
       config.appid = data.appid
       config.seller_id = data.seller_id || ''
@@ -655,6 +712,63 @@ async function loadConfig() {
   } catch (e) {
     console.error('配置加载失败:', e)
   }
+}
+
+function applyPagination(rawPagination) {
+  if (!rawPagination || typeof rawPagination !== 'object') {
+    pagination.count = 0
+    pagination.page_no = 1
+    pagination.page_size = 20
+    return
+  }
+
+  pagination.count = Number(rawPagination.count) || 0
+  pagination.page_no = Number(rawPagination.page_no) || 1
+  pagination.page_size = Number(rawPagination.page_size) || 20
+}
+
+function persistProductsCache() {
+  try {
+    const cacheData = {
+      products: products.value,
+      pagination: {
+        count: pagination.count,
+        page_no: pagination.page_no,
+        page_size: pagination.page_size,
+      },
+      query_time: productsQueryTime.value || '',
+      queried_at: productsFetchedAt.value || '',
+      cached_at: new Date().toISOString(),
+      queried: productsQueried.value,
+    }
+    localStorage.setItem(PRODUCT_QUERY_CACHE_KEY, JSON.stringify(cacheData))
+  } catch (e) {
+    console.warn('商品查询缓存写入失败:', e)
+  }
+}
+
+function restoreProductsCache() {
+  try {
+    const raw = localStorage.getItem(PRODUCT_QUERY_CACHE_KEY)
+    if (!raw) return
+
+    const cache = JSON.parse(raw)
+    if (!Array.isArray(cache.products)) return
+
+    products.value = cache.products
+    productsQueried.value = Boolean(cache.queried)
+    productsQueryTime.value = typeof cache.query_time === 'string' ? cache.query_time : ''
+    productsFetchedAt.value = typeof cache.queried_at === 'string' ? cache.queried_at : ''
+    productsRestoredAt.value = productsFetchedAt.value || formatDateTime(cache.cached_at)
+    applyPagination(cache.pagination)
+  } catch (e) {
+    console.warn('商品查询缓存恢复失败，已忽略:', e)
+    localStorage.removeItem(PRODUCT_QUERY_CACHE_KEY)
+  }
+}
+
+function refreshProducts() {
+  queryProducts(true)
 }
 
 // 保存配置
@@ -690,6 +804,7 @@ async function saveConfig() {
     if (data.success) {
       config.updated_at = data.updated_at || new Date().toISOString()
       hasSavedSecret.value = Boolean(data.has_secret)
+      configLoadedFromBackend.value = true
       config.appsecret = ''
       ElMessage.success(data.secret_preserved ? '配置已保存（沿用已保存的 AppSecret）' : (data.message || '配置已保存'))
     } else {
@@ -732,27 +847,31 @@ async function queryShops() {
 }
 
 // 查询商品
-async function queryProducts() {
+async function queryProducts(forceRefresh = false) {
+  if (!configReady.value) {
+    ElMessage.warning('请先完成 API 配置')
+    return
+  }
+
   queryingProducts.value = true
-  productsQueried.value = false
-  products.value = []
   productsError.value = ''
+  productsRestoredAt.value = ''
 
   try {
     const res = await fetch(`${API_BASE}/api/products`)
     const data = await res.json()
 
-    if (data.success && data.data) {
+    if (data.success && Array.isArray(data.data)) {
       products.value = data.data
       productsQueried.value = true
       productsQueryTime.value = data.query_time || ''
+      productsFetchedAt.value = new Date().toLocaleString('zh-CN')
 
-      if (data.pagination) {
-        pagination.count = data.pagination.count
-        pagination.page_no = data.pagination.page_no
-        pagination.page_size = data.pagination.page_size
-      }
-      ElMessage.success(`查询成功，共 ${products.value.length} 条记录`)
+      applyPagination(data.pagination)
+      persistProductsCache()
+
+      const actionText = forceRefresh ? '重新获取成功，缓存已更新' : '查询成功'
+      ElMessage.success(`${actionText}，共 ${products.value.length} 条记录`)
     } else {
       productsError.value = data.detail || '查询失败'
       ElMessage.error(productsError.value)
@@ -910,6 +1029,7 @@ function resetCreateForm() {
   Object.assign(createForm, getDefaultCreateForm())
   createAdvancedEnabled.value = false
   createAdvancedJson.value = '{}'
+  createOptionalPanels.value = []
   createProductError.value = ''
   createProductResult.value = ''
 }
@@ -918,6 +1038,7 @@ function resetPublishForm() {
   Object.assign(publishForm, getDefaultPublishForm())
   publishAdvancedEnabled.value = false
   publishAdvancedJson.value = '{}'
+  publishOptionalPanels.value = []
   publishProductError.value = ''
   publishProductResult.value = ''
 }
@@ -1201,6 +1322,14 @@ body {
   color: #0f172a;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .panel-form {
   max-width: 1120px;
 }
@@ -1316,6 +1445,66 @@ body {
   color: #64748b;
   font-size: 13px;
   margin-bottom: 10px;
+}
+
+.required-hint {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.hint-title {
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hint-content {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.hint-sub {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.optional-collapse {
+  border-top: none;
+  border-bottom: none;
+}
+
+.optional-collapse .el-collapse-item__header {
+  border-bottom: none;
+  background: transparent;
+  height: auto;
+  line-height: 1.4;
+  padding: 2px 0 8px;
+}
+
+.optional-collapse .el-collapse-item__wrap {
+  border-bottom: none;
+  background: transparent;
+}
+
+.optional-collapse .el-collapse-item__content {
+  padding-bottom: 0;
+}
+
+.collapse-title-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .switch-tip {
@@ -1478,10 +1667,16 @@ body {
 
   .card-header {
     gap: 8px;
+    align-items: flex-start;
   }
 
   .card-header > span {
     font-size: 14px;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .result-info {
