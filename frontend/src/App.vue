@@ -17,6 +17,9 @@
           <el-menu-item index="config">⚙️ API 配置</el-menu-item>
           <el-menu-item index="shops">🏪 店铺信息查询</el-menu-item>
           <el-menu-item index="products">📦 商品列表查询</el-menu-item>
+          <el-menu-item index="orders">🧾 订单信息查询</el-menu-item>
+          <el-menu-item index="batchPublish">📚 批量上架工作台</el-menu-item>
+          <el-menu-item index="templates">🧩 模板快捷创建</el-menu-item>
           <el-menu-item index="create">➕ 商品创建</el-menu-item>
           <el-menu-item index="publish">🚀 商品上架</el-menu-item>
           <el-menu-item index="callback">📨 回调状态</el-menu-item>
@@ -47,6 +50,25 @@
             class="mb-4"
           />
 
+          <div class="binding-status-card mb-4">
+            <div class="binding-status-title">长期绑定状态</div>
+            <div class="binding-status-grid">
+              <div class="binding-status-item" :class="{ saved: bindingStatus.appidSaved }">
+                <span class="label">AppKey (appid)</span>
+                <span class="value">{{ bindingStatus.appidSaved ? '已保存' : '未保存' }}</span>
+              </div>
+              <div class="binding-status-item" :class="{ saved: bindingStatus.sellerIdSaved }">
+                <span class="label">Seller ID</span>
+                <span class="value">{{ bindingStatus.sellerIdSaved ? '已保存' : '未保存' }}</span>
+              </div>
+              <div class="binding-status-item" :class="{ saved: bindingStatus.secretSaved }">
+                <span class="label">AppSecret</span>
+                <span class="value">{{ bindingStatus.secretSaved ? '已保存' : '未保存' }}</span>
+              </div>
+            </div>
+            <div class="binding-status-desc">{{ bindingStatusDesc }}</div>
+          </div>
+
           <el-form :model="config" label-width="140px" size="large" class="panel-form">
             <el-form-item label="AppKey (appid)" required>
               <el-input v-model="config.appid" placeholder="请输入 appid" type="number" />
@@ -73,7 +95,10 @@
           <template #header>
             <div class="card-header">
               <span>🏪 店铺信息查询</span>
-              <el-button type="success" @click="queryShops" :loading="querying">🔍 查询店铺</el-button>
+              <div class="header-actions">
+                <el-button type="success" @click="queryShops" :loading="querying">🔍 查询店铺</el-button>
+                <el-button @click="refreshShops" :loading="querying" :disabled="!configReady">🔄 重新获取</el-button>
+              </div>
             </div>
           </template>
 
@@ -94,10 +119,20 @@
             class="mb-4"
           />
 
+          <el-alert
+            v-if="shopsRestoredAt"
+            :title="`已恢复上次查询结果（查询时间：${shopsRestoredAt}）`"
+            type="info"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
           <div v-if="shops.length > 0" class="shops-list">
             <div class="result-info">
               <span>✅ 查询成功，共 <strong>{{ shops.length }}</strong> 个店铺</span>
               <span v-if="queryTime">⏱️ 耗时：{{ queryTime }}</span>
+              <span v-if="shopsFetchedAt">🕒 查询时间：{{ shopsFetchedAt }}</span>
             </div>
 
             <div class="table-scroll">
@@ -231,6 +266,171 @@
           </div>
 
           <el-empty v-else-if="productsQueried" description="暂无商品数据" />
+        </el-card>
+
+        <!-- 订单列表 -->
+        <el-card v-show="activeMenu === 'orders'" class="panel-card">
+          <template #header>
+            <div class="card-header">
+              <span>🧾 订单信息查询</span>
+              <div class="header-actions">
+                <el-button type="success" @click="queryOrders" :loading="queryingOrders">🔍 查询订单</el-button>
+                <el-button @click="refreshOrders" :loading="queryingOrders" :disabled="!configReady">🔄 重新获取</el-button>
+              </div>
+            </div>
+          </template>
+
+          <el-alert
+            v-if="!configReady"
+            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            type="warning"
+            show-icon
+            class="mb-4"
+          />
+
+          <el-alert
+            v-if="ordersError"
+            :title="ordersError"
+            type="error"
+            show-icon
+            closable
+            class="mb-4"
+          />
+
+          <el-alert
+            v-if="ordersRestoredAt"
+            :title="`已恢复上次查询结果（查询时间：${ordersRestoredAt}）`"
+            type="info"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
+          <div v-if="orders.length > 0" class="orders-list">
+            <div class="result-info">
+              <span>✅ 查询成功，共 <strong>{{ orders.length }}</strong> 条记录</span>
+              <div class="pagination-info">
+                <span>第 {{ ordersPagination.page_no }} 页</span>
+                <span>共 {{ ordersPagination.count }} 条</span>
+                <span>每页 {{ ordersPagination.page_size }} 条</span>
+              </div>
+              <span v-if="ordersQueryTime">⏱️ 耗时：{{ ordersQueryTime }}</span>
+              <span v-if="ordersFetchedAt">🕒 查询时间：{{ ordersFetchedAt }}</span>
+            </div>
+
+            <div class="table-scroll">
+              <el-table :data="orders" stripe class="data-table orders-table">
+                <el-table-column prop="order_id" label="订单号" min-width="220" />
+                <el-table-column prop="title" label="商品信息" min-width="220" />
+                <el-table-column label="金额" width="140">
+                  <template #default="scope">
+                    <span class="price">💰 {{ scope.row.amount_str }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="order_status_text" label="订单状态" width="150" />
+                <el-table-column prop="buyer_name" label="买家" width="160" />
+                <el-table-column prop="seller_name" label="卖家" width="160" />
+                <el-table-column prop="created_at_text" label="下单时间" width="180" />
+              </el-table>
+            </div>
+          </div>
+
+          <el-empty v-else-if="ordersQueried" description="暂无订单数据" />
+        </el-card>
+
+        <!-- 批量上架工作台（Phase-2 规划位） -->
+        <el-card v-show="activeMenu === 'batchPublish'" class="panel-card">
+          <template #header>
+            <div class="card-header">
+              <span>📚 批量上架工作台</span>
+              <div class="header-actions">
+                <el-button type="success" @click="queryProducts" :loading="queryingProducts">🔍 拉取可上架商品</el-button>
+                <el-button @click="activeMenu = 'publish'">🚀 去单商品上架</el-button>
+              </div>
+            </div>
+          </template>
+
+          <el-alert
+            title="Phase-2 规划：支持勾选多个商品，一键批量上架（后端顺序逐个调用 publish 接口）。"
+            type="info"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
+          <div class="roadmap-grid">
+            <div class="roadmap-item done">
+              <div class="title">阶段 1（已完成）</div>
+              <ul>
+                <li>绑定配置长期保存</li>
+                <li>店铺/商品/订单查询与缓存恢复</li>
+                <li>订单查询后端链路打通</li>
+              </ul>
+            </div>
+            <div class="roadmap-item next">
+              <div class="title">阶段 2（下一步）</div>
+              <ul>
+                <li>商品表格支持复选框多选</li>
+                <li>后端顺序调用 publish，返回逐条结果</li>
+                <li>失败项可重试 + 回调状态追踪</li>
+              </ul>
+            </div>
+            <div class="roadmap-item plan">
+              <div class="title">当前准备度</div>
+              <ul>
+                <li>可查询商品总数：{{ products.length }}</li>
+                <li>可直接复用现有 publish 接口</li>
+                <li>建议先在 5 条以内灰度验证</li>
+              </ul>
+            </div>
+          </div>
+        </el-card>
+
+        <!-- 模板快捷创建（Phase-3 规划位） -->
+        <el-card v-show="activeMenu === 'templates'" class="panel-card">
+          <template #header>
+            <div class="card-header">
+              <span>🧩 模板快捷创建</span>
+              <div class="header-actions">
+                <el-button type="primary" @click="activeMenu = 'create'">➕ 去创建商品</el-button>
+              </div>
+            </div>
+          </template>
+
+          <el-alert
+            title="Phase-3 规划：基于已有商品沉淀模板，新建时仅填写少数字段即可一键创建。"
+            type="info"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
+          <div class="roadmap-grid">
+            <div class="roadmap-item next">
+              <div class="title">模板字段设计</div>
+              <ul>
+                <li>保留稳定字段：类目、发货地、图文模板</li>
+                <li>覆盖易变字段：标题、价格、库存、图片</li>
+                <li>支持从已有商品一键生成模板</li>
+              </ul>
+            </div>
+            <div class="roadmap-item plan">
+              <div class="title">交互方案</div>
+              <ul>
+                <li>模板列表 + 最近使用排序</li>
+                <li>一键应用到创建表单并可二次编辑</li>
+                <li>提交前显示最终请求体预览</li>
+              </ul>
+            </div>
+            <div class="roadmap-item done">
+              <div class="title">当前可先做</div>
+              <ul>
+                <li>先通过“商品创建”表单完成手工创建</li>
+                <li>利用“示例填充”快速改少数字段</li>
+                <li>后续平滑切换到模板模式</li>
+              </ul>
+            </div>
+          </div>
         </el-card>
 
         <!-- 商品创建 -->
@@ -564,7 +764,9 @@ const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8001'
   : `http://${window.location.hostname}:8001`
 
+const SHOP_QUERY_CACHE_KEY = 'goofish:shops-query-cache:v1'
 const PRODUCT_QUERY_CACHE_KEY = 'goofish:products-query-cache:v1'
+const ORDER_QUERY_CACHE_KEY = 'goofish:orders-query-cache:v1'
 
 const ITEM_BIZ_TYPE_OPTIONS = [
   { value: 2, label: '2 - 普通商品' },
@@ -592,6 +794,9 @@ const MENU_META = {
   config: { title: 'API 配置', desc: '配置 appid / appsecret / seller_id，作为全部功能的基础。' },
   shops: { title: '店铺信息查询', desc: '查询店铺授权与状态信息。' },
   products: { title: '商品列表查询', desc: '查询商品列表、价格、库存与状态。' },
+  orders: { title: '订单信息查询', desc: '查询订单列表、金额、状态和买卖双方信息。' },
+  batchPublish: { title: '批量上架工作台', desc: '面向 Phase-2：批量勾选商品并顺序调用上架接口。' },
+  templates: { title: '模板快捷创建', desc: '面向 Phase-3：基于模板少填字段快速创建商品。' },
   create: { title: '商品创建', desc: '按接口字段化创建商品，支持可选高级 JSON 扩展。' },
   publish: { title: '商品上架', desc: '提交上架请求（异步），结果在回调状态查看。' },
   callback: { title: '回调状态', desc: '查看最近商品回调记录，追踪任务状态与错误信息。' },
@@ -661,6 +866,26 @@ const configReady = computed(() => {
   return appidReady && secretReady
 })
 
+const bindingStatus = computed(() => {
+  const sellerIdValue = config.seller_id
+  const sellerIdSaved = !(sellerIdValue === null || sellerIdValue === '' || sellerIdValue === 0)
+  return {
+    appidSaved: Boolean(config.appid),
+    sellerIdSaved,
+    secretSaved: hasSavedSecret.value,
+  }
+})
+
+const bindingStatusDesc = computed(() => {
+  const status = bindingStatus.value
+  if (status.appidSaved && status.secretSaved) {
+    return status.sellerIdSaved
+      ? '绑定完整：appid / seller_id / secret 已保存，查询能力可长期复用。'
+      : '核心绑定已完成：appid / secret 已保存；seller_id 可按需补充。'
+  }
+  return '请至少确保 appid + AppSecret 已保存，避免刷新后配置失效。'
+})
+
 // 状态
 const saving = ref(false)
 const querying = ref(false)
@@ -669,6 +894,8 @@ const queried = ref(false)
 const lastQueryTime = ref('')
 const lastError = ref('')
 const queryTime = ref('')
+const shopsFetchedAt = ref('')
+const shopsRestoredAt = ref('')
 const backendStatus = ref('检测中...')
 
 // 商品状态
@@ -680,6 +907,20 @@ const productsQueryTime = ref('')
 const productsFetchedAt = ref('')
 const productsRestoredAt = ref('')
 const pagination = reactive({
+  count: 0,
+  page_no: 1,
+  page_size: 20,
+})
+
+// 订单状态
+const queryingOrders = ref(false)
+const orders = ref([])
+const ordersQueried = ref(false)
+const ordersError = ref('')
+const ordersQueryTime = ref('')
+const ordersFetchedAt = ref('')
+const ordersRestoredAt = ref('')
+const ordersPagination = reactive({
   count: 0,
   page_no: 1,
   page_size: 20,
@@ -796,7 +1037,9 @@ onMounted(async () => {
 
   await checkBackend()
   await loadConfig()
+  restoreShopsCache()
   restoreProductsCache()
+  restoreOrdersCache()
   await loadCallbackRecords(true)
   callbackTimer = setInterval(() => {
     loadCallbackRecords(true)
@@ -830,17 +1073,15 @@ async function loadConfig() {
     hasSavedSecret.value = Boolean(data.has_secret)
     configLoadedFromBackend.value = Boolean(data.appid || data.has_secret || data.seller_id || data.updated_at)
 
-    if (data.appid && data.appid !== 0) {
-      config.appid = data.appid
-      config.seller_id = data.seller_id || ''
-      config.updated_at = data.updated_at || ''
-    }
+    config.appid = Number(data.appid) || 0
+    config.seller_id = data.seller_id ?? ''
+    config.updated_at = data.updated_at || ''
   } catch (e) {
     console.error('配置加载失败:', e)
   }
 }
 
-function applyPagination(rawPagination) {
+function applyProductsPagination(rawPagination) {
   if (!rawPagination || typeof rawPagination !== 'object') {
     pagination.count = 0
     pagination.page_no = 1
@@ -851,6 +1092,53 @@ function applyPagination(rawPagination) {
   pagination.count = Number(rawPagination.count) || 0
   pagination.page_no = Number(rawPagination.page_no) || 1
   pagination.page_size = Number(rawPagination.page_size) || 20
+}
+
+function applyOrdersPagination(rawPagination) {
+  if (!rawPagination || typeof rawPagination !== 'object') {
+    ordersPagination.count = 0
+    ordersPagination.page_no = 1
+    ordersPagination.page_size = 20
+    return
+  }
+
+  ordersPagination.count = Number(rawPagination.count) || 0
+  ordersPagination.page_no = Number(rawPagination.page_no) || 1
+  ordersPagination.page_size = Number(rawPagination.page_size) || 20
+}
+
+function persistShopsCache() {
+  try {
+    const cacheData = {
+      shops: shops.value,
+      query_time: queryTime.value || '',
+      queried_at: shopsFetchedAt.value || '',
+      cached_at: new Date().toISOString(),
+      queried: queried.value,
+    }
+    localStorage.setItem(SHOP_QUERY_CACHE_KEY, JSON.stringify(cacheData))
+  } catch (e) {
+    console.warn('店铺查询缓存写入失败:', e)
+  }
+}
+
+function restoreShopsCache() {
+  try {
+    const raw = localStorage.getItem(SHOP_QUERY_CACHE_KEY)
+    if (!raw) return
+
+    const cache = JSON.parse(raw)
+    if (!Array.isArray(cache.shops)) return
+
+    shops.value = cache.shops
+    queried.value = Boolean(cache.queried)
+    queryTime.value = typeof cache.query_time === 'string' ? cache.query_time : ''
+    shopsFetchedAt.value = typeof cache.queried_at === 'string' ? cache.queried_at : ''
+    shopsRestoredAt.value = shopsFetchedAt.value || formatDateTime(cache.cached_at)
+  } catch (e) {
+    console.warn('店铺查询缓存恢复失败，已忽略:', e)
+    localStorage.removeItem(SHOP_QUERY_CACHE_KEY)
+  }
 }
 
 function persistProductsCache() {
@@ -886,15 +1174,63 @@ function restoreProductsCache() {
     productsQueryTime.value = typeof cache.query_time === 'string' ? cache.query_time : ''
     productsFetchedAt.value = typeof cache.queried_at === 'string' ? cache.queried_at : ''
     productsRestoredAt.value = productsFetchedAt.value || formatDateTime(cache.cached_at)
-    applyPagination(cache.pagination)
+    applyProductsPagination(cache.pagination)
   } catch (e) {
     console.warn('商品查询缓存恢复失败，已忽略:', e)
     localStorage.removeItem(PRODUCT_QUERY_CACHE_KEY)
   }
 }
 
+function persistOrdersCache() {
+  try {
+    const cacheData = {
+      orders: orders.value,
+      pagination: {
+        count: ordersPagination.count,
+        page_no: ordersPagination.page_no,
+        page_size: ordersPagination.page_size,
+      },
+      query_time: ordersQueryTime.value || '',
+      queried_at: ordersFetchedAt.value || '',
+      cached_at: new Date().toISOString(),
+      queried: ordersQueried.value,
+    }
+    localStorage.setItem(ORDER_QUERY_CACHE_KEY, JSON.stringify(cacheData))
+  } catch (e) {
+    console.warn('订单查询缓存写入失败:', e)
+  }
+}
+
+function restoreOrdersCache() {
+  try {
+    const raw = localStorage.getItem(ORDER_QUERY_CACHE_KEY)
+    if (!raw) return
+
+    const cache = JSON.parse(raw)
+    if (!Array.isArray(cache.orders)) return
+
+    orders.value = cache.orders
+    ordersQueried.value = Boolean(cache.queried)
+    ordersQueryTime.value = typeof cache.query_time === 'string' ? cache.query_time : ''
+    ordersFetchedAt.value = typeof cache.queried_at === 'string' ? cache.queried_at : ''
+    ordersRestoredAt.value = ordersFetchedAt.value || formatDateTime(cache.cached_at)
+    applyOrdersPagination(cache.pagination)
+  } catch (e) {
+    console.warn('订单查询缓存恢复失败，已忽略:', e)
+    localStorage.removeItem(ORDER_QUERY_CACHE_KEY)
+  }
+}
+
 function refreshProducts() {
   queryProducts(true)
+}
+
+function refreshShops() {
+  queryShops(true)
+}
+
+function refreshOrders() {
+  queryOrders(true)
 }
 
 // 保存配置
@@ -944,22 +1280,33 @@ async function saveConfig() {
 }
 
 // 查询店铺
-async function queryShops() {
+async function queryShops(forceRefresh = false) {
+  if (!configReady.value) {
+    ElMessage.warning('请先完成 API 配置')
+    return
+  }
+
   querying.value = true
   queried.value = false
   shops.value = []
   lastError.value = ''
+  shopsRestoredAt.value = ''
 
   try {
     const res = await fetch(`${API_BASE}/api/shops`)
     const data = await res.json()
 
-    if (data.success && data.data) {
+    if (data.success && Array.isArray(data.data)) {
       shops.value = data.data
       queried.value = true
       lastQueryTime.value = new Date().toLocaleString('zh-CN')
       queryTime.value = data.query_time || ''
-      ElMessage.success(`查询成功，共 ${shops.value.length} 个店铺`)
+      shopsFetchedAt.value = new Date().toLocaleString('zh-CN')
+
+      persistShopsCache()
+
+      const actionText = forceRefresh ? '重新获取成功，缓存已更新' : '查询成功'
+      ElMessage.success(`${actionText}，共 ${shops.value.length} 个店铺`)
     } else {
       lastError.value = data.detail || '查询失败'
       ElMessage.error(lastError.value)
@@ -993,7 +1340,7 @@ async function queryProducts(forceRefresh = false) {
       productsQueryTime.value = data.query_time || ''
       productsFetchedAt.value = new Date().toLocaleString('zh-CN')
 
-      applyPagination(data.pagination)
+      applyProductsPagination(data.pagination)
       persistProductsCache()
 
       const actionText = forceRefresh ? '重新获取成功，缓存已更新' : '查询成功'
@@ -1007,6 +1354,43 @@ async function queryProducts(forceRefresh = false) {
     ElMessage.error(productsError.value)
   } finally {
     queryingProducts.value = false
+  }
+}
+
+async function queryOrders(forceRefresh = false) {
+  if (!configReady.value) {
+    ElMessage.warning('请先完成 API 配置')
+    return
+  }
+
+  queryingOrders.value = true
+  ordersError.value = ''
+  ordersRestoredAt.value = ''
+
+  try {
+    const res = await fetch(`${API_BASE}/api/orders`)
+    const data = await res.json()
+
+    if (data.success && Array.isArray(data.data)) {
+      orders.value = data.data
+      ordersQueried.value = true
+      ordersQueryTime.value = data.query_time || ''
+      ordersFetchedAt.value = new Date().toLocaleString('zh-CN')
+
+      applyOrdersPagination(data.pagination)
+      persistOrdersCache()
+
+      const actionText = forceRefresh ? '重新获取成功，缓存已更新' : '查询成功'
+      ElMessage.success(`${actionText}，共 ${orders.value.length} 条记录`)
+    } else {
+      ordersError.value = data.detail || '查询失败'
+      ElMessage.error(ordersError.value)
+    }
+  } catch (e) {
+    ordersError.value = '查询失败：' + e.message
+    ElMessage.error(ordersError.value)
+  } finally {
+    queryingOrders.value = false
   }
 }
 
@@ -1518,6 +1902,63 @@ body {
 
 .update-time { color: #64748b; font-size: 13px; }
 
+.binding-status-card {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: linear-gradient(95deg, #eff6ff 0%, #f8fafc 55%, #ffffff 100%);
+  padding: 12px;
+}
+
+.binding-status-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 8px;
+}
+
+.binding-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.binding-status-item {
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.binding-status-item.saved {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.binding-status-item .label {
+  font-size: 12px;
+  color: #334155;
+}
+
+.binding-status-item .value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.binding-status-item.saved .value {
+  color: #166534;
+}
+
+.binding-status-desc {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+
 .shop-info { padding: 8px 0; }
 .shop-name { font-weight: 600; color: #0f172a; margin-bottom: 6px; }
 .shop-meta { display: flex; gap: 15px; font-size: 13px; color: #64748b; }
@@ -1525,6 +1966,49 @@ body {
 .price { color: #dc2626; font-weight: 700; }
 .shop-detail { padding: 15px; background: #f8fafc; }
 .shop-detail h4 { margin-bottom: 10px; color: #334155; }
+
+.roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.roadmap-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.roadmap-item .title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.roadmap-item ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.roadmap-item.done {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.roadmap-item.next {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.roadmap-item.plan {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
 
 .form-section {
   padding: 14px 14px 10px;
@@ -1838,6 +2322,10 @@ body {
 
 .products-table {
   min-width: 860px;
+}
+
+.orders-table {
+  min-width: 1160px;
 }
 
 .callback-table {
