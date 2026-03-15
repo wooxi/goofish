@@ -1,7 +1,7 @@
 <template>
   <div class="goofish-layout">
     <el-container class="layout-root">
-      <el-aside width="240px" class="sidebar">
+      <el-aside width="240px" class="sidebar" :class="{ 'is-compact': isCompactViewport }">
         <div class="brand">
           <div class="brand-title">🐟 Goofish</div>
           <div class="brand-subtitle">闲鱼管理工作台</div>
@@ -9,6 +9,8 @@
 
         <el-menu
           :default-active="activeMenu"
+          :mode="menuMode"
+          :ellipsis="false"
           class="sidebar-menu"
           @select="handleMenuSelect"
         >
@@ -89,8 +91,9 @@
               <span v-if="queryTime">⏱️ 耗时：{{ queryTime }}</span>
             </div>
 
-            <el-table :data="shops" stripe>
-              <el-table-column type="expand">
+            <div class="table-scroll">
+              <el-table :data="shops" stripe class="data-table shops-table">
+                <el-table-column type="expand">
                 <template #default="props">
                   <div class="shop-detail">
                     <h4>📋 详细信息</h4>
@@ -140,6 +143,7 @@
                 </template>
               </el-table-column>
             </el-table>
+            </div>
           </div>
 
           <el-empty v-else-if="queried" description="暂无店铺数据" />
@@ -182,8 +186,9 @@
               <span v-if="productsQueryTime">⏱️ 耗时：{{ productsQueryTime }}</span>
             </div>
 
-            <el-table :data="products" stripe>
-              <el-table-column prop="product_id" label="商品 ID" width="180" />
+            <div class="table-scroll">
+              <el-table :data="products" stripe class="data-table products-table">
+                <el-table-column prop="product_id" label="商品 ID" width="180" />
               <el-table-column prop="title" label="商品标题" min-width="300" />
               <el-table-column label="价格" width="120">
                 <template #default="scope">
@@ -199,7 +204,8 @@
                   </el-tag>
                 </template>
               </el-table-column>
-            </el-table>
+              </el-table>
+            </div>
           </div>
 
           <el-empty v-else-if="productsQueried" description="暂无商品数据" />
@@ -225,74 +231,91 @@
           <p class="op-tip">按接口最小必填字段提交；高级模式可追加扩展 JSON。</p>
 
           <el-form label-width="140px" class="compact-form panel-form">
-            <div class="form-grid">
-              <el-form-item label="商品类型 item_biz_type" required>
-                <el-select v-model="createForm.item_biz_type" placeholder="请选择" style="width: 100%">
-                  <el-option v-for="item in ITEM_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="行业类型 sp_biz_type" required>
-                <el-select v-model="createForm.sp_biz_type" placeholder="请选择" style="width: 100%">
-                  <el-option v-for="item in SP_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="类目ID channel_cat_id" required>
-                <el-input v-model.trim="createForm.channel_cat_id" placeholder="如：e11455..." />
-              </el-form-item>
-              <el-form-item label="售价 price(分)" required>
-                <el-input-number v-model="createForm.price" :min="1" :max="9999999900" :step="1" style="width: 100%" />
-              </el-form-item>
-              <el-form-item label="运费 express_fee(分)" required>
-                <el-input-number v-model="createForm.express_fee" :step="1" style="width: 100%" />
-              </el-form-item>
-              <el-form-item label="库存 stock" required>
-                <el-input-number v-model="createForm.stock" :min="1" :max="399960" :step="1" style="width: 100%" />
-              </el-form-item>
-            </div>
+            <section class="form-section">
+              <div class="section-title-row">
+                <div class="section-title">基础参数</div>
+                <span class="section-badge required">必填</span>
+              </div>
+              <div class="form-grid">
+                <el-form-item class="key-field" label="商品类型 item_biz_type" required>
+                  <el-select v-model="createForm.item_biz_type" placeholder="请选择" style="width: 100%">
+                    <el-option v-for="item in ITEM_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item class="key-field" label="行业类型 sp_biz_type" required>
+                  <el-select v-model="createForm.sp_biz_type" placeholder="请选择" style="width: 100%">
+                    <el-option v-for="item in SP_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item class="key-field" label="类目ID channel_cat_id" required>
+                  <el-input v-model.trim="createForm.channel_cat_id" placeholder="如：e11455..." />
+                </el-form-item>
+                <el-form-item class="key-field" label="售价 price(分)" required>
+                  <el-input-number v-model="createForm.price" :min="1" :max="9999999900" :step="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="运费 express_fee(分)" required>
+                  <el-input-number v-model="createForm.express_fee" :step="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="库存 stock" required>
+                  <el-input-number v-model="createForm.stock" :min="1" :max="399960" :step="1" style="width: 100%" />
+                </el-form-item>
+              </div>
+            </section>
 
-            <el-divider content-position="left">publish_shop[0]（必填）</el-divider>
-            <div class="form-grid">
-              <el-form-item label="闲鱼会员名 user_name" required>
-                <el-input v-model.trim="createForm.publish_shop.user_name" placeholder="tbxxxx" />
+            <section class="form-section">
+              <div class="section-title-row">
+                <div class="section-title">发布店铺信息 publish_shop[0]</div>
+                <span class="section-badge required">必填</span>
+              </div>
+              <div class="form-grid">
+                <el-form-item class="key-field" label="闲鱼会员名 user_name" required>
+                  <el-input v-model.trim="createForm.publish_shop.user_name" placeholder="tbxxxx" />
+                </el-form-item>
+                <el-form-item label="发货省 province" required>
+                  <el-input-number v-model="createForm.publish_shop.province" :step="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="发货市 city" required>
+                  <el-input-number v-model="createForm.publish_shop.city" :step="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item label="发货区 district" required>
+                  <el-input-number v-model="createForm.publish_shop.district" :step="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item class="key-field" label="标题 title" required>
+                  <el-input v-model.trim="createForm.publish_shop.title" maxlength="60" show-word-limit />
+                </el-form-item>
+              </div>
+              <el-form-item class="key-field" label="描述 content" required>
+                <el-input v-model="createForm.publish_shop.content" type="textarea" :rows="4" maxlength="5000" show-word-limit />
               </el-form-item>
-              <el-form-item label="发货省 province" required>
-                <el-input-number v-model="createForm.publish_shop.province" :step="1" style="width: 100%" />
+              <el-form-item class="key-field" label="图片 URLs" required>
+                <el-input
+                  v-model="createForm.publish_shop.images_text"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="每行一个 URL（或逗号分隔）"
+                />
               </el-form-item>
-              <el-form-item label="发货市 city" required>
-                <el-input-number v-model="createForm.publish_shop.city" :step="1" style="width: 100%" />
-              </el-form-item>
-              <el-form-item label="发货区 district" required>
-                <el-input-number v-model="createForm.publish_shop.district" :step="1" style="width: 100%" />
-              </el-form-item>
-              <el-form-item label="标题 title" required>
-                <el-input v-model.trim="createForm.publish_shop.title" maxlength="60" show-word-limit />
-              </el-form-item>
-            </div>
-            <el-form-item label="描述 content" required>
-              <el-input v-model="createForm.publish_shop.content" type="textarea" :rows="4" maxlength="5000" show-word-limit />
-            </el-form-item>
-            <el-form-item label="图片 URLs" required>
-              <el-input
-                v-model="createForm.publish_shop.images_text"
-                type="textarea"
-                :rows="4"
-                placeholder="每行一个 URL（或逗号分隔）"
-              />
-            </el-form-item>
+            </section>
 
-            <el-form-item label="高级模式">
-              <el-switch v-model="createAdvancedEnabled" />
-              <span class="switch-tip">附加扩展 JSON（可选）</span>
-            </el-form-item>
-            <el-form-item v-if="createAdvancedEnabled" label="扩展 JSON">
-              <el-input
-                v-model="createAdvancedJson"
-                type="textarea"
-                :rows="8"
-                class="json-input"
-                placeholder='例如：{"channel_pv":[...],"outer_id":"123"}'
-              />
-            </el-form-item>
+            <section class="form-section subtle">
+              <div class="section-title-row">
+                <div class="section-title">扩展参数</div>
+                <span class="section-badge optional">可选</span>
+              </div>
+              <el-form-item label="高级模式">
+                <el-switch v-model="createAdvancedEnabled" />
+                <span class="switch-tip">附加扩展 JSON（可选）</span>
+              </el-form-item>
+              <el-form-item v-if="createAdvancedEnabled" label="扩展 JSON">
+                <el-input
+                  v-model="createAdvancedJson"
+                  type="textarea"
+                  :rows="8"
+                  class="json-input"
+                  placeholder='例如：{"channel_pv":[...],"outer_id":"123"}'
+                />
+              </el-form-item>
+            </section>
           </el-form>
 
           <div class="op-actions">
@@ -331,38 +354,55 @@
           <p class="op-tip">按接口最小必填字段提交；接口为异步处理，结果看回调状态页。</p>
 
           <el-form label-width="140px" class="compact-form panel-form">
-            <el-form-item label="商品ID product_id" required>
-              <el-input-number v-model="publishForm.product_id" :min="1" :step="1" style="width: 100%" />
-            </el-form-item>
-            <el-form-item label="闲鱼会员名 user_name" required>
-              <el-input v-model.trim="publishForm.user_name" placeholder="tbxxxx" />
-            </el-form-item>
-            <el-form-item label="定时上架时间">
-              <el-input
-                v-model.trim="publishForm.specify_publish_time"
-                placeholder="可选，如：2026-03-14 12:30:00"
-              />
-            </el-form-item>
-            <el-form-item label="回调地址 notify_url">
-              <el-input
-                v-model.trim="publishForm.notify_url"
-                placeholder="可选，建议填写后端回调接收地址"
-              />
-            </el-form-item>
+            <section class="form-section">
+              <div class="section-title-row">
+                <div class="section-title">上架核心参数</div>
+                <span class="section-badge required">必填</span>
+              </div>
+              <div class="form-grid publish-grid">
+                <el-form-item class="key-field" label="商品ID product_id" required>
+                  <el-input-number v-model="publishForm.product_id" :min="1" :step="1" style="width: 100%" />
+                </el-form-item>
+                <el-form-item class="key-field" label="闲鱼会员名 user_name" required>
+                  <el-input v-model.trim="publishForm.user_name" placeholder="tbxxxx" />
+                </el-form-item>
+              </div>
+            </section>
 
-            <el-form-item label="高级模式">
-              <el-switch v-model="publishAdvancedEnabled" />
-              <span class="switch-tip">附加扩展 JSON（可选）</span>
-            </el-form-item>
-            <el-form-item v-if="publishAdvancedEnabled" label="扩展 JSON">
-              <el-input
-                v-model="publishAdvancedJson"
-                type="textarea"
-                :rows="8"
-                class="json-input"
-                placeholder='例如：{"notify_url":"https://xxx/callback"}'
-              />
-            </el-form-item>
+            <section class="form-section subtle">
+              <div class="section-title-row">
+                <div class="section-title">扩展设置</div>
+                <span class="section-badge optional">可选</span>
+              </div>
+              <div class="form-grid publish-grid">
+                <el-form-item label="定时上架时间">
+                  <el-input
+                    v-model.trim="publishForm.specify_publish_time"
+                    placeholder="可选，如：2026-03-14 12:30:00"
+                  />
+                </el-form-item>
+                <el-form-item label="回调地址 notify_url">
+                  <el-input
+                    v-model.trim="publishForm.notify_url"
+                    placeholder="可选，建议填写后端回调接收地址"
+                  />
+                </el-form-item>
+              </div>
+
+              <el-form-item label="高级模式">
+                <el-switch v-model="publishAdvancedEnabled" />
+                <span class="switch-tip">附加扩展 JSON（可选）</span>
+              </el-form-item>
+              <el-form-item v-if="publishAdvancedEnabled" label="扩展 JSON">
+                <el-input
+                  v-model="publishAdvancedJson"
+                  type="textarea"
+                  :rows="8"
+                  class="json-input"
+                  placeholder='例如：{"notify_url":"https://xxx/callback"}'
+                />
+              </el-form-item>
+            </section>
           </el-form>
 
           <div class="op-actions">
@@ -402,8 +442,9 @@
             closable
             class="mb-4"
           />
-          <el-table v-if="callbackRecords.length > 0" :data="callbackRecords" stripe>
-            <el-table-column prop="received_at" label="接收时间" width="180">
+          <div v-if="callbackRecords.length > 0" class="table-scroll">
+            <el-table :data="callbackRecords" stripe class="data-table callback-table">
+              <el-table-column prop="received_at" label="接收时间" width="180">
               <template #default="scope">{{ formatDateTime(scope.row.received_at) }}</template>
             </el-table-column>
             <el-table-column prop="task_type" label="task_type" width="120" />
@@ -413,10 +454,11 @@
             <el-table-column prop="product_id" label="product_id" width="140" />
             <el-table-column prop="publish_status" label="publish_status" width="130" />
             <el-table-column prop="user_name" label="user_name" width="150" />
-            <el-table-column prop="task_time" label="task_time" width="180">
-              <template #default="scope">{{ formatCallbackTime(scope.row.task_time) }}</template>
-            </el-table-column>
-          </el-table>
+              <el-table-column prop="task_time" label="task_time" width="180">
+                <template #default="scope">{{ formatCallbackTime(scope.row.task_time) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
           <el-empty v-else description="暂无回调记录" />
         </el-card>
       </el-main>
@@ -462,8 +504,16 @@ const MENU_META = {
 }
 
 const activeMenu = ref('config')
+const viewportWidth = ref(window.innerWidth)
+const isCompactViewport = computed(() => viewportWidth.value <= 960)
+const menuMode = computed(() => (isCompactViewport.value ? 'horizontal' : 'vertical'))
+
 const currentMenuTitle = computed(() => MENU_META[activeMenu.value]?.title || 'Goofish')
 const currentMenuDesc = computed(() => MENU_META[activeMenu.value]?.desc || '')
+
+function syncViewport() {
+  viewportWidth.value = window.innerWidth
+}
 
 function handleMenuSelect(index) {
   activeMenu.value = index
@@ -561,6 +611,9 @@ const callbackError = ref('')
 let callbackTimer = null
 
 onMounted(async () => {
+  syncViewport()
+  window.addEventListener('resize', syncViewport)
+
   await checkBackend()
   await loadConfig()
   await loadCallbackRecords(true)
@@ -570,6 +623,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', syncViewport)
+
   if (callbackTimer) {
     clearInterval(callbackTimer)
     callbackTimer = null
@@ -1070,6 +1125,8 @@ body {
   line-height: 46px;
   margin: 6px 10px;
   border-radius: 8px;
+  position: relative;
+  transition: all 0.2s ease;
 }
 
 .sidebar-menu .el-menu-item:hover {
@@ -1079,7 +1136,20 @@ body {
 
 .sidebar-menu .el-menu-item.is-active {
   color: #fff;
+  font-weight: 600;
   background: linear-gradient(90deg, #2563eb, #3b82f6) !important;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.25);
+}
+
+.sidebar-menu .el-menu-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .workspace {
@@ -1111,14 +1181,28 @@ body {
   border: 1px solid #e5e7eb;
 }
 
+.panel-card .el-card__header {
+  padding: 14px 18px;
+}
+
+.panel-card .el-card__body {
+  padding: 18px;
+}
+
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
+.card-header > span {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
 .panel-form {
-  max-width: 1100px;
+  max-width: 1120px;
 }
 
 .mb-4 { margin-bottom: 16px; }
@@ -1127,11 +1211,19 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
   margin-bottom: 12px;
-  padding: 10px 12px;
-  background: #eff6ff;
+  padding: 12px 14px;
+  background: linear-gradient(90deg, rgba(239, 246, 255, 0.95), rgba(248, 250, 252, 0.95));
   border: 1px solid #bfdbfe;
-  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+  border-radius: 10px;
+}
+
+.result-info > span:first-child {
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .pagination-info {
@@ -1139,6 +1231,7 @@ body {
   gap: 12px;
   font-size: 12px;
   color: #64748b;
+  flex-wrap: wrap;
 }
 
 .update-time { color: #64748b; font-size: 13px; }
@@ -1151,13 +1244,73 @@ body {
 .shop-detail { padding: 15px; background: #f8fafc; }
 .shop-detail h4 { margin-bottom: 10px; color: #334155; }
 
+.form-section {
+  padding: 14px 14px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 14px;
+}
+
+.form-section.subtle {
+  background: #f8fafc;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.section-badge {
+  font-size: 11px;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 999px;
+}
+
+.section-badge.required {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.section-badge.optional {
+  color: #475569;
+  background: #e2e8f0;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 6px 10px;
+  gap: 8px 12px;
 }
 
-.compact-form .el-form-item { margin-bottom: 12px; }
+.publish-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.compact-form .el-form-item {
+  margin-bottom: 14px;
+}
+
+.compact-form .el-form-item__label {
+  color: #334155;
+  font-weight: 500;
+  padding-right: 12px;
+}
+
+.key-field .el-form-item__label {
+  color: #0f172a;
+  font-weight: 700;
+}
 
 .op-tip {
   color: #64748b;
@@ -1171,7 +1324,33 @@ body {
   font-size: 12px;
 }
 
-.op-actions { margin-top: 10px; margin-bottom: 10px; }
+.op-actions {
+  margin-top: 4px;
+  margin-bottom: 10px;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+.data-table {
+  min-width: 820px;
+}
+
+.shops-table {
+  min-width: 980px;
+}
+
+.products-table {
+  min-width: 860px;
+}
+
+.callback-table {
+  min-width: 1260px;
+}
 
 .json-input textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
@@ -1225,8 +1404,123 @@ body {
 .expire-unknown { color: #94a3b8; }
 
 @media (max-width: 960px) {
-  .goofish-layout { padding: 8px; }
-  .layout-root { min-height: auto; }
-  .status-bar { flex-direction: column; gap: 6px; }
+  .goofish-layout {
+    padding: 8px;
+  }
+
+  .layout-root {
+    min-height: auto;
+    display: block;
+  }
+
+  .layout-root > .sidebar {
+    width: 100% !important;
+    border-right: none;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .sidebar.is-compact .brand {
+    padding: 12px 14px 10px;
+  }
+
+  .sidebar.is-compact .brand-title {
+    font-size: 18px;
+  }
+
+  .sidebar.is-compact .brand-subtitle {
+    display: none;
+  }
+
+  .sidebar-menu.el-menu--horizontal {
+    border-bottom: none !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    padding: 0 8px 10px;
+  }
+
+  .sidebar-menu.el-menu--horizontal::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .sidebar-menu.el-menu--horizontal .el-menu-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    line-height: 38px;
+    margin: 6px 6px 0 0;
+    padding: 0 12px !important;
+    border-bottom: none !important;
+  }
+
+  .sidebar-menu .el-menu-item.is-active::before {
+    display: none;
+  }
+
+  .workspace {
+    padding: 12px;
+  }
+
+  .workspace-header {
+    margin-bottom: 10px;
+    padding: 12px;
+  }
+
+  .workspace-header h2 {
+    font-size: 18px;
+  }
+
+  .panel-card .el-card__header,
+  .panel-card .el-card__body {
+    padding: 12px;
+  }
+
+  .card-header {
+    gap: 8px;
+  }
+
+  .card-header > span {
+    font-size: 14px;
+  }
+
+  .result-info {
+    align-items: flex-start;
+  }
+
+  .pagination-info {
+    width: 100%;
+  }
+
+  .form-section {
+    padding: 12px 10px 8px;
+  }
+
+  .form-grid,
+  .publish-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .compact-form .el-form-item {
+    margin-bottom: 10px;
+  }
+
+  .compact-form .el-form-item__label {
+    line-height: 1.3;
+  }
+
+  .table-scroll {
+    margin: 0 -2px;
+  }
+
+  .data-table {
+    min-width: 760px;
+  }
+
+  .status-bar {
+    flex-direction: column;
+    gap: 6px;
+  }
 }
 </style>
