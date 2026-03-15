@@ -238,29 +238,46 @@
                 <span>第 {{ pagination.page_no }} 页</span>
                 <span>共 {{ pagination.count }} 条</span>
                 <span>每页 {{ pagination.page_size }} 条</span>
+                <span>已勾选 {{ selectedProductIds.length }} 条</span>
               </div>
               <span v-if="productsQueryTime">⏱️ 耗时：{{ productsQueryTime }}</span>
               <span v-if="productsFetchedAt">🕒 查询时间：{{ productsFetchedAt }}</span>
+              <div class="header-actions">
+                <el-button size="small" @click="clearProductSelection" :disabled="selectedProductIds.length === 0">清空勾选</el-button>
+                <el-button type="warning" size="small" @click="openBatchPublishWithSelection" :disabled="selectedProductIds.length === 0">📚 批量上架所选</el-button>
+              </div>
             </div>
 
             <div class="table-scroll">
-              <el-table :data="products" stripe class="data-table products-table">
+              <el-table
+                :data="products"
+                stripe
+                class="data-table products-table"
+                row-key="product_id"
+                @selection-change="handleProductSelectionChange"
+              >
+                <el-table-column type="selection" width="52" reserve-selection />
                 <el-table-column prop="product_id" label="商品 ID" width="180" />
-              <el-table-column prop="title" label="商品标题" min-width="300" />
-              <el-table-column label="价格" width="120">
-                <template #default="scope">
-                  <span class="price">💰 {{ scope.row.price_str }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="stock" label="库存" width="80" />
-              <el-table-column prop="sold" label="销量" width="80" />
-              <el-table-column label="状态" width="120">
-                <template #default="scope">
-                  <el-tag :type="getStatusType(scope.row.product_status)" size="small">
-                    {{ scope.row.product_status_str }}
-                  </el-tag>
-                </template>
-              </el-table-column>
+                <el-table-column prop="title" label="商品标题" min-width="300" />
+                <el-table-column label="价格" width="120">
+                  <template #default="scope">
+                    <span class="price">💰 {{ scope.row.price_str }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="stock" label="库存" width="80" />
+                <el-table-column prop="sold" label="销量" width="80" />
+                <el-table-column label="状态" width="120">
+                  <template #default="scope">
+                    <el-tag :type="getStatusType(scope.row.product_status)" size="small">
+                      {{ scope.row.product_status_str }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="快捷操作" width="150">
+                  <template #default="scope">
+                    <el-button link type="primary" @click="createTemplateFromProductRow(scope.row)">生成模板</el-button>
+                  </template>
+                </el-table-column>
               </el-table>
             </div>
           </div>
@@ -338,99 +355,169 @@
           <el-empty v-else-if="ordersQueried" description="暂无订单数据" />
         </el-card>
 
-        <!-- 批量上架工作台（Phase-2 规划位） -->
+        <!-- 批量上架工作台 -->
         <el-card v-show="activeMenu === 'batchPublish'" class="panel-card">
           <template #header>
             <div class="card-header">
               <span>📚 批量上架工作台</span>
               <div class="header-actions">
                 <el-button type="success" @click="queryProducts" :loading="queryingProducts">🔍 拉取可上架商品</el-button>
-                <el-button @click="activeMenu = 'publish'">🚀 去单商品上架</el-button>
+                <el-button @click="activeMenu = 'products'">📦 去勾选商品</el-button>
               </div>
             </div>
           </template>
 
           <el-alert
-            title="Phase-2 规划：支持勾选多个商品，一键批量上架（后端顺序逐个调用 publish 接口）。"
-            type="info"
+            v-if="!configReady"
+            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            type="warning"
             show-icon
-            :closable="false"
             class="mb-4"
           />
 
-          <div class="roadmap-grid">
-            <div class="roadmap-item done">
-              <div class="title">阶段 1（已完成）</div>
-              <ul>
-                <li>绑定配置长期保存</li>
-                <li>店铺/商品/订单查询与缓存恢复</li>
-                <li>订单查询后端链路打通</li>
-              </ul>
+          <div class="feature-grid mb-4">
+            <div class="feature-item">
+              <div class="title">执行方式</div>
+              <div class="desc">后端会按 product_id 顺序逐条调用 publish 接口，并返回逐条结果。</div>
             </div>
-            <div class="roadmap-item next">
-              <div class="title">阶段 2（下一步）</div>
-              <ul>
-                <li>商品表格支持复选框多选</li>
-                <li>后端顺序调用 publish，返回逐条结果</li>
-                <li>失败项可重试 + 回调状态追踪</li>
-              </ul>
+            <div class="feature-item">
+              <div class="title">当前勾选</div>
+              <div class="desc">已选择 {{ selectedProductIds.length }} 条商品，可直接一键上架。</div>
             </div>
-            <div class="roadmap-item plan">
-              <div class="title">当前准备度</div>
-              <ul>
-                <li>可查询商品总数：{{ products.length }}</li>
-                <li>可直接复用现有 publish 接口</li>
-                <li>建议先在 5 条以内灰度验证</li>
-              </ul>
+          </div>
+
+          <el-form label-width="150px" class="compact-form panel-form mb-4">
+            <div class="form-grid publish-grid">
+              <el-form-item label="闲鱼会员名 user_name" required>
+                <el-input v-model.trim="batchPublishForm.user_name" placeholder="tbxxxx" />
+              </el-form-item>
+              <el-form-item label="回调地址 notify_url">
+                <el-input v-model.trim="batchPublishForm.notify_url" placeholder="可选" />
+              </el-form-item>
+              <el-form-item label="定时上架时间">
+                <el-input v-model.trim="batchPublishForm.specify_publish_time" placeholder="可选，如 2026-03-14 12:30:00" />
+              </el-form-item>
+            </div>
+          </el-form>
+
+          <div class="op-actions">
+            <el-button @click="clearProductSelection" :disabled="selectedProductIds.length === 0">清空勾选</el-button>
+            <el-button type="warning" @click="submitBatchPublish()" :loading="batchPublishing" :disabled="selectedProductIds.length === 0">🚀 一键批量上架</el-button>
+          </div>
+
+          <el-alert v-if="batchPublishError" :title="batchPublishError" type="error" show-icon closable class="mb-4" />
+
+          <div v-if="selectedProductsForBatch.length > 0" class="table-scroll mb-4">
+            <el-table :data="selectedProductsForBatch" stripe class="data-table products-table">
+              <el-table-column prop="product_id" label="商品 ID" width="180" />
+              <el-table-column prop="title" label="商品标题" min-width="280" />
+              <el-table-column prop="price_str" label="价格" width="120" />
+              <el-table-column prop="stock" label="库存" width="90" />
+              <el-table-column prop="product_status_str" label="状态" width="120" />
+            </el-table>
+          </div>
+
+          <el-empty v-else description="请先到“商品列表查询”勾选商品" />
+
+          <div v-if="batchPublishResult" class="batch-result-wrap">
+            <div class="result-info">
+              <span>
+                批量执行完成：共 {{ batchPublishResult.summary.total }} 条，成功 {{ batchPublishResult.summary.success }} 条，失败 {{ batchPublishResult.summary.failed }} 条
+              </span>
+              <div class="header-actions">
+                <el-button
+                  type="danger"
+                  plain
+                  size="small"
+                  :disabled="failedBatchProductIds.length === 0"
+                  :loading="batchRetryingFailed"
+                  @click="retryFailedBatchItems"
+                >
+                  重试失败项（{{ failedBatchProductIds.length }}）
+                </el-button>
+              </div>
+            </div>
+
+            <div class="table-scroll">
+              <el-table :data="batchPublishResult.results" stripe class="data-table products-table">
+                <el-table-column prop="product_id" label="商品 ID" width="180" />
+                <el-table-column label="结果" width="100">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.success ? 'success' : 'danger'">{{ scope.row.success ? '成功' : '失败' }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="message" label="返回信息" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="error" label="错误信息" min-width="240" show-overflow-tooltip />
+                <el-table-column prop="query_time" label="耗时" width="110" />
+              </el-table>
             </div>
           </div>
         </el-card>
 
-        <!-- 模板快捷创建（Phase-3 规划位） -->
+        <!-- 模板快捷创建 -->
         <el-card v-show="activeMenu === 'templates'" class="panel-card">
           <template #header>
             <div class="card-header">
               <span>🧩 模板快捷创建</span>
               <div class="header-actions">
+                <el-button @click="loadTemplates()" :loading="templatesLoading">🔄 刷新模板</el-button>
                 <el-button type="primary" @click="activeMenu = 'create'">➕ 去创建商品</el-button>
               </div>
             </div>
           </template>
 
           <el-alert
-            title="Phase-3 规划：基于已有商品沉淀模板，新建时仅填写少数字段即可一键创建。"
+            title="支持：新增模板、基于当前表单保存、删除模板、应用模板；也支持从已选商品生成简化模板。"
             type="info"
             show-icon
             :closable="false"
             class="mb-4"
           />
 
-          <div class="roadmap-grid">
-            <div class="roadmap-item next">
-              <div class="title">模板字段设计</div>
-              <ul>
-                <li>保留稳定字段：类目、发货地、图文模板</li>
-                <li>覆盖易变字段：标题、价格、库存、图片</li>
-                <li>支持从已有商品一键生成模板</li>
-              </ul>
+          <el-alert
+            title="从已有商品生成模板为简化版：商品列表不含完整详情（如图片/长描述）时，会沿用当前创建表单中的对应字段。"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
+          <el-form label-width="120px" class="compact-form panel-form mb-4">
+            <div class="form-grid">
+              <el-form-item label="模板名称" required>
+                <el-input v-model.trim="templateDraft.name" maxlength="80" placeholder="例如：数码配件通用模板" />
+              </el-form-item>
+              <el-form-item label="模板说明">
+                <el-input v-model.trim="templateDraft.description" maxlength="120" placeholder="可选" />
+              </el-form-item>
             </div>
-            <div class="roadmap-item plan">
-              <div class="title">交互方案</div>
-              <ul>
-                <li>模板列表 + 最近使用排序</li>
-                <li>一键应用到创建表单并可二次编辑</li>
-                <li>提交前显示最终请求体预览</li>
-              </ul>
-            </div>
-            <div class="roadmap-item done">
-              <div class="title">当前可先做</div>
-              <ul>
-                <li>先通过“商品创建”表单完成手工创建</li>
-                <li>利用“示例填充”快速改少数字段</li>
-                <li>后续平滑切换到模板模式</li>
-              </ul>
-            </div>
+          </el-form>
+
+          <div class="op-actions">
+            <el-button @click="createBlankTemplate" :loading="savingTemplate">新增空白模板</el-button>
+            <el-button type="primary" @click="saveCurrentFormAsTemplate" :loading="savingTemplate">保存当前创建表单为模板</el-button>
+            <el-button @click="createTemplateFromSelectedProduct" :disabled="selectedProductRows.length !== 1" :loading="savingTemplate">从已勾选商品生成模板</el-button>
           </div>
+
+          <el-alert v-if="templatesError" :title="templatesError" type="error" show-icon closable class="mb-4" />
+
+          <div class="table-scroll" v-if="templates.length > 0">
+            <el-table :data="templates" stripe class="data-table products-table">
+              <el-table-column prop="name" label="模板名称" min-width="180" />
+              <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
+              <el-table-column prop="source" label="来源" width="120" />
+              <el-table-column label="更新时间" width="180">
+                <template #default="scope">{{ formatDateTime(scope.row.updated_at) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="210">
+                <template #default="scope">
+                  <el-button link type="primary" @click="applyTemplate(scope.row)">应用并去创建</el-button>
+                  <el-button link type="danger" @click="removeTemplate(scope.row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <el-empty v-else description="暂无模板，先保存一个吧" />
         </el-card>
 
         <!-- 商品创建 -->
@@ -795,8 +882,8 @@ const MENU_META = {
   shops: { title: '店铺信息查询', desc: '查询店铺授权与状态信息。' },
   products: { title: '商品列表查询', desc: '查询商品列表、价格、库存与状态。' },
   orders: { title: '订单信息查询', desc: '查询订单列表、金额、状态和买卖双方信息。' },
-  batchPublish: { title: '批量上架工作台', desc: '面向 Phase-2：批量勾选商品并顺序调用上架接口。' },
-  templates: { title: '模板快捷创建', desc: '面向 Phase-3：基于模板少填字段快速创建商品。' },
+  batchPublish: { title: '批量上架工作台', desc: '批量勾选商品后顺序调用上架接口，支持失败重试。' },
+  templates: { title: '模板快捷创建', desc: '沉淀常用字段模板，应用后可快速创建商品。' },
   create: { title: '商品创建', desc: '按接口字段化创建商品，支持可选高级 JSON 扩展。' },
   publish: { title: '商品上架', desc: '提交上架请求（异步），结果在回调状态查看。' },
   callback: { title: '回调状态', desc: '查看最近商品回调记录，追踪任务状态与错误信息。' },
@@ -910,6 +997,44 @@ const pagination = reactive({
   count: 0,
   page_no: 1,
   page_size: 20,
+})
+
+const selectedProductRows = ref([])
+const selectedProductIds = computed(() => {
+  const ids = selectedProductRows.value
+    .map((item) => Number(item?.product_id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+  return Array.from(new Set(ids))
+})
+const selectedProductsForBatch = computed(() => {
+  const idSet = new Set(selectedProductIds.value)
+  return products.value.filter((item) => idSet.has(Number(item?.product_id)))
+})
+
+const batchPublishForm = reactive({
+  user_name: '',
+  specify_publish_time: '',
+  notify_url: `${API_BASE}/api/products/callback/receive`,
+})
+const batchPublishing = ref(false)
+const batchRetryingFailed = ref(false)
+const batchPublishError = ref('')
+const batchPublishResult = ref(null)
+const failedBatchProductIds = computed(() => {
+  if (!batchPublishResult.value || !Array.isArray(batchPublishResult.value.results)) return []
+  return batchPublishResult.value.results
+    .filter((item) => !item.success)
+    .map((item) => Number(item.product_id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+})
+
+const templates = ref([])
+const templatesLoading = ref(false)
+const templatesError = ref('')
+const savingTemplate = ref(false)
+const templateDraft = reactive({
+  name: '',
+  description: '',
 })
 
 // 订单状态
@@ -1040,6 +1165,7 @@ onMounted(async () => {
   restoreShopsCache()
   restoreProductsCache()
   restoreOrdersCache()
+  await loadTemplates(true)
   await loadCallbackRecords(true)
   callbackTimer = setInterval(() => {
     loadCallbackRecords(true)
@@ -1233,6 +1359,296 @@ function refreshOrders() {
   queryOrders(true)
 }
 
+function handleProductSelectionChange(rows) {
+  selectedProductRows.value = Array.isArray(rows) ? rows : []
+}
+
+function clearProductSelection() {
+  selectedProductRows.value = []
+}
+
+function openBatchPublishWithSelection() {
+  if (selectedProductIds.value.length === 0) {
+    ElMessage.warning('请先勾选要批量上架的商品')
+    return
+  }
+  activeMenu.value = 'batchPublish'
+}
+
+function buildTemplateDataFromCreateForm() {
+  return {
+    item_biz_type: createForm.item_biz_type,
+    sp_biz_type: createForm.sp_biz_type,
+    channel_cat_id: createForm.channel_cat_id,
+    price: createForm.price,
+    express_fee: createForm.express_fee,
+    stock: createForm.stock,
+    publish_shop: {
+      user_name: createForm.publish_shop.user_name,
+      province: createForm.publish_shop.province,
+      city: createForm.publish_shop.city,
+      district: createForm.publish_shop.district,
+      title: createForm.publish_shop.title,
+      content: createForm.publish_shop.content,
+      images: parseImages(createForm.publish_shop.images_text),
+    },
+  }
+}
+
+function buildTemplateDataFromProductRow(row) {
+  const base = buildTemplateDataFromCreateForm()
+  return {
+    ...base,
+    price: Number.isInteger(Number(row?.price)) ? Number(row.price) : base.price,
+    stock: Number.isInteger(Number(row?.stock)) ? Number(row.stock) : base.stock,
+    express_fee: Number.isInteger(Number(row?.express_fee)) ? Number(row.express_fee) : base.express_fee,
+    publish_shop: {
+      ...base.publish_shop,
+      title: (row?.title || '').trim() || base.publish_shop.title,
+      content: base.publish_shop.content || `商品参考：${(row?.title || '').trim() || '请补充商品描述'}`,
+    },
+  }
+}
+
+function applyTemplateData(templateData) {
+  if (!isPlainObject(templateData)) {
+    throw new Error('模板数据格式错误')
+  }
+
+  if (templateData.item_biz_type !== undefined) createForm.item_biz_type = Number(templateData.item_biz_type)
+  if (templateData.sp_biz_type !== undefined) createForm.sp_biz_type = Number(templateData.sp_biz_type)
+  if (templateData.channel_cat_id !== undefined) createForm.channel_cat_id = String(templateData.channel_cat_id || '')
+  if (templateData.price !== undefined) createForm.price = Number(templateData.price)
+  if (templateData.express_fee !== undefined) createForm.express_fee = Number(templateData.express_fee)
+  if (templateData.stock !== undefined) createForm.stock = Number(templateData.stock)
+
+  const shop = templateData.publish_shop
+  if (isPlainObject(shop)) {
+    if (shop.user_name !== undefined) createForm.publish_shop.user_name = String(shop.user_name || '')
+    if (shop.province !== undefined) createForm.publish_shop.province = shop.province === null || shop.province === '' ? null : Number(shop.province)
+    if (shop.city !== undefined) createForm.publish_shop.city = shop.city === null || shop.city === '' ? null : Number(shop.city)
+    if (shop.district !== undefined) createForm.publish_shop.district = shop.district === null || shop.district === '' ? null : Number(shop.district)
+    if (shop.title !== undefined) createForm.publish_shop.title = String(shop.title || '')
+    if (shop.content !== undefined) createForm.publish_shop.content = String(shop.content || '')
+    if (Array.isArray(shop.images)) createForm.publish_shop.images_text = shop.images.join('\n')
+  }
+}
+
+async function loadTemplates(silent = false) {
+  if (!silent) templatesLoading.value = true
+  templatesError.value = ''
+  try {
+    const res = await fetch(`${API_BASE}/api/templates`)
+    const data = await res.json()
+    if (data.success && Array.isArray(data.data)) {
+      templates.value = data.data
+    } else {
+      templatesError.value = data.detail || '模板读取失败'
+      if (!silent) ElMessage.error(templatesError.value)
+    }
+  } catch (e) {
+    templatesError.value = `模板读取失败：${e.message}`
+    if (!silent) ElMessage.error(templatesError.value)
+  } finally {
+    if (!silent) templatesLoading.value = false
+  }
+}
+
+async function createTemplate(payload) {
+  savingTemplate.value = true
+  templatesError.value = ''
+  try {
+    const res = await fetch(`${API_BASE}/api/templates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (data.success) {
+      ElMessage.success(data.message || '模板创建成功')
+      await loadTemplates(true)
+      return data.data
+    }
+    throw new Error(data.detail || '模板创建失败')
+  } catch (e) {
+    templatesError.value = e.message || '模板创建失败'
+    ElMessage.error(templatesError.value)
+    return null
+  } finally {
+    savingTemplate.value = false
+  }
+}
+
+function getTemplateName(defaultPrefix) {
+  const name = (templateDraft.name || '').trim()
+  if (name) return name
+  const stamp = new Date().toLocaleString('zh-CN').replace(/[\/:\s]/g, '-')
+  return `${defaultPrefix}-${stamp}`
+}
+
+async function createBlankTemplate() {
+  const name = getTemplateName('空白模板')
+  const payload = {
+    name,
+    description: (templateDraft.description || '').trim(),
+    source: 'blank',
+    template_data: {
+      item_biz_type: 2,
+      sp_biz_type: 1,
+      express_fee: 0,
+      stock: 1,
+      publish_shop: {
+        user_name: '',
+        title: '',
+        content: '',
+        images: [],
+      },
+    },
+  }
+
+  const created = await createTemplate(payload)
+  if (created) {
+    templateDraft.name = ''
+    templateDraft.description = ''
+  }
+}
+
+async function saveCurrentFormAsTemplate() {
+  const name = getTemplateName('表单模板')
+  const payload = {
+    name,
+    description: (templateDraft.description || '').trim(),
+    source: 'form',
+    template_data: buildTemplateDataFromCreateForm(),
+  }
+
+  const created = await createTemplate(payload)
+  if (created) {
+    templateDraft.name = ''
+    templateDraft.description = ''
+  }
+}
+
+async function createTemplateFromProductRow(row) {
+  const title = (row?.title || '').trim() || `商品-${row?.product_id || 'unknown'}`
+  const payload = {
+    name: `${title}-模板`,
+    description: `从商品 ${row?.product_id || '-'} 生成`,
+    source: 'product',
+    template_data: buildTemplateDataFromProductRow(row),
+  }
+  await createTemplate(payload)
+}
+
+async function createTemplateFromSelectedProduct() {
+  if (selectedProductRows.value.length !== 1) {
+    ElMessage.warning('请先在商品列表中勾选 1 条商品')
+    return
+  }
+  await createTemplateFromProductRow(selectedProductRows.value[0])
+}
+
+function applyTemplate(template) {
+  try {
+    applyTemplateData(template.template_data || {})
+    activeMenu.value = 'create'
+    ElMessage.success(`已应用模板：${template.name}`)
+  } catch (e) {
+    ElMessage.error(e.message || '模板应用失败')
+  }
+}
+
+async function removeTemplate(template) {
+  try {
+    const res = await fetch(`${API_BASE}/api/templates/${template.template_id}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (data.success) {
+      ElMessage.success(data.message || '模板已删除')
+      await loadTemplates(true)
+    } else {
+      ElMessage.error(data.detail || '模板删除失败')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '模板删除失败')
+  }
+}
+
+function buildBatchPublishPayload(productIds) {
+  const payload = {
+    product_ids: productIds,
+    user_name: (batchPublishForm.user_name || '').trim(),
+  }
+
+  if (batchPublishForm.notify_url && batchPublishForm.notify_url.trim()) {
+    payload.notify_url = batchPublishForm.notify_url.trim()
+  }
+  if (batchPublishForm.specify_publish_time && batchPublishForm.specify_publish_time.trim()) {
+    payload.specify_publish_time = batchPublishForm.specify_publish_time.trim()
+  }
+
+  return payload
+}
+
+async function submitBatchPublish(productIds = null) {
+  if (!configReady.value) {
+    ElMessage.warning('请先完成 API 配置')
+    return
+  }
+
+  const targetIds = Array.isArray(productIds) && productIds.length > 0
+    ? productIds
+    : selectedProductIds.value
+
+  if (!targetIds.length) {
+    ElMessage.warning('请先勾选要上架的商品')
+    return
+  }
+
+  if (!(batchPublishForm.user_name || '').trim()) {
+    batchPublishError.value = '批量上架需要填写 user_name'
+    ElMessage.error(batchPublishError.value)
+    return
+  }
+
+  if (Array.isArray(productIds) && productIds.length > 0) {
+    batchRetryingFailed.value = true
+  } else {
+    batchPublishing.value = true
+  }
+  batchPublishError.value = ''
+
+  try {
+    const payload = buildBatchPublishPayload(targetIds)
+    const res = await fetch(`${API_BASE}/api/products/publish/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (data.success) {
+      batchPublishResult.value = data
+      ElMessage.success(data.message || '批量上架执行完成')
+    } else {
+      batchPublishError.value = data.detail || '批量上架失败'
+      ElMessage.error(batchPublishError.value)
+    }
+  } catch (e) {
+    batchPublishError.value = e.message || '批量上架失败'
+    ElMessage.error(batchPublishError.value)
+  } finally {
+    batchPublishing.value = false
+    batchRetryingFailed.value = false
+  }
+}
+
+async function retryFailedBatchItems() {
+  if (failedBatchProductIds.value.length === 0) {
+    ElMessage.info('当前没有失败项可重试')
+    return
+  }
+  await submitBatchPublish(failedBatchProductIds.value)
+}
+
 // 保存配置
 async function saveConfig() {
   if (!config.appid) {
@@ -1339,6 +1755,7 @@ async function queryProducts(forceRefresh = false) {
       productsQueried.value = true
       productsQueryTime.value = data.query_time || ''
       productsFetchedAt.value = new Date().toLocaleString('zh-CN')
+      clearProductSelection()
 
       applyProductsPagination(data.pagination)
       persistProductsCache()
@@ -1967,47 +2384,43 @@ body {
 .shop-detail { padding: 15px; background: #f8fafc; }
 .shop-detail h4 { margin-bottom: 10px; color: #334155; }
 
-.roadmap-grid {
+.feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
 }
 
-.roadmap-item {
-  border: 1px solid #e2e8f0;
+.feature-item {
+  border: 1px solid #dbeafe;
   border-radius: 10px;
-  background: #f8fafc;
+  background: #eff6ff;
   padding: 12px;
 }
 
-.roadmap-item .title {
+.feature-item .title {
   font-size: 13px;
   font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 8px;
+  color: #1e3a8a;
+  margin-bottom: 6px;
 }
 
-.roadmap-item ul {
-  margin: 0;
-  padding-left: 18px;
+.feature-item .desc {
   color: #475569;
   font-size: 12px;
   line-height: 1.55;
 }
 
-.roadmap-item.done {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
+.op-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.roadmap-item.next {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-.roadmap-item.plan {
-  border-color: #e2e8f0;
-  background: #f8fafc;
+.batch-result-wrap {
+  margin-top: 14px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 12px;
 }
 
 .form-section {

@@ -9,6 +9,7 @@ Goofish 闲鱼管理后端 - FastAPI
 import logging
 import os
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -17,10 +18,12 @@ PROJECT_ROOT = Path(__file__).parent.parent
 LOG_DIR = PROJECT_ROOT / "logs"
 CONFIG_FILE = PROJECT_ROOT / "config" / "app_config.json"
 CALLBACK_FILE = PROJECT_ROOT / "data" / "product_callback_records.jsonl"
+TEMPLATE_FILE = PROJECT_ROOT / "data" / "product_templates.json"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 CALLBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+TEMPLATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # ── 日志配置 ──
 LOG_FILE = LOG_DIR / "backend.log"
@@ -364,6 +367,70 @@ def read_callback_records(limit: int = 50) -> List[Dict[str, Any]]:
             continue
 
     return records
+
+
+def load_templates() -> List[Dict[str, Any]]:
+    if not TEMPLATE_FILE.exists():
+        return []
+
+    try:
+        with open(TEMPLATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return []
+    except Exception as e:
+        logger.error(f"❌ 读取模板文件失败：{e}", exc_info=True)
+        return []
+
+
+def save_templates(templates: List[Dict[str, Any]]) -> None:
+    with open(TEMPLATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(templates, f, ensure_ascii=False, indent=2)
+
+
+def normalize_template_data(template_data: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(template_data, dict):
+        raise ValueError("template_data 必须是对象")
+
+    normalized = {
+        "item_biz_type": template_data.get("item_biz_type"),
+        "sp_biz_type": template_data.get("sp_biz_type"),
+        "channel_cat_id": template_data.get("channel_cat_id"),
+        "price": template_data.get("price"),
+        "express_fee": template_data.get("express_fee"),
+        "stock": template_data.get("stock"),
+    }
+
+    publish_shop = template_data.get("publish_shop")
+    if publish_shop is not None:
+        if not isinstance(publish_shop, dict):
+            raise ValueError("template_data.publish_shop 必须是对象")
+
+        images = publish_shop.get("images")
+        if images is None:
+            normalized_images: List[str] = []
+        elif isinstance(images, list):
+            normalized_images = [str(img).strip() for img in images if str(img).strip()]
+        else:
+            raise ValueError("template_data.publish_shop.images 必须是数组")
+
+        normalized["publish_shop"] = {
+            "user_name": publish_shop.get("user_name"),
+            "province": publish_shop.get("province"),
+            "city": publish_shop.get("city"),
+            "district": publish_shop.get("district"),
+            "title": publish_shop.get("title"),
+            "content": publish_shop.get("content"),
+            "images": normalized_images,
+        }
+
+    for key in list(normalized.keys()):
+        value = normalized[key]
+        if value is None:
+            normalized.pop(key)
+
+    return normalized
 
 # ── 全局异常处理 ──
 @app.exception_handler(Exception)
@@ -749,6 +816,23 @@ async def get_products():
 
 
 
+async def execute_publish_action(payload: Dict[str, Any], action_name: str = "上架商品") -> Dict[str, Any]:
+    validate_publish_payload(payload)
+    api_result, elapsed = await call_open_api(
+        path="/api/open/product/publish",
+        body=payload,
+        action_name=action_name,
+    )
+
+    return {
+        "data": api_result.get("data"),
+        "raw": api_result,
+        "message": api_result.get("msg", "OK"),
+        "query_time": f"{elapsed:.2f}s",
+        "is_async": True,
+    }
+
+
 @app.post("/api/products/create")
 async def create_product(payload: Dict[str, Any]):
     """
@@ -788,23 +872,179 @@ async def publish_product(payload: Dict[str, Any]):
     logger.info("🚀 上架商品请求")
 
     try:
-        validate_publish_payload(payload)
+        result = await execute_publish_action(payload, action_name="上架商品")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    api_result, elapsed = await call_open_api(
-        path="/api/open/product/publish",
-        body=payload,
-        action_name="上架商品",
-    )
+    return {
+        "success": True,
+        **result,
+    }
+
+
+@app.post("/api/products/publish/batch")
+async def batch_publish_products(payload: Dict[str, Any]):
+    """
+    批量上架商品：按 product_id 顺序逐条调用现有 publish 逻辑。
+    """
+    logger.info("📚 批量上架请求")
+
+    product_ids = payload.get("product_ids")
+    user_name = payload.get("user_name")
+    notify_url = payload.get("notify_url")
+    specify_publish_time = payload.get("specify_publish_time")
+
+    if not isinstance(product_ids, list) or len(product_ids) == 0:
+        raise HTTPException(status_code=400, detail="product_ids 必须是非空数组")
+    if len(product_ids) > 100:
+        raise HTTPException(status_code=400, detail="单次批量上架最多支持 100 条")
+    if not isinstance(user_name, str) or not user_name.strip():
+        raise HTTPException(status_code=400, detail="user_name 为必填字符串")
+
+    normalized_ids: List[int] = []
+    seen_ids = set()
+    for idx, product_id in enumerate(product_ids):
+        try:
+            normalized_id = _ensure_int(product_id, f"product_ids[{idx}]")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        if normalized_id <= 0:
+            raise HTTPException(status_code=400, detail=f"product_ids[{idx}] 必须大于 0")
+
+        if normalized_id in seen_ids:
+            continue
+        seen_ids.add(normalized_id)
+        normalized_ids.append(normalized_id)
+
+    results: List[Dict[str, Any]] = []
+    success_count = 0
+
+    for product_id in normalized_ids:
+        single_payload: Dict[str, Any] = {
+            "product_id": product_id,
+            "user_name": [user_name.strip()],
+        }
+        if isinstance(notify_url, str) and notify_url.strip():
+            single_payload["notify_url"] = notify_url.strip()
+        if isinstance(specify_publish_time, str) and specify_publish_time.strip():
+            single_payload["specify_publish_time"] = specify_publish_time.strip()
+
+        try:
+            single_result = await execute_publish_action(single_payload, action_name=f"批量上架[{product_id}]")
+            results.append(
+                {
+                    "product_id": product_id,
+                    "success": True,
+                    "message": single_result.get("message", "OK"),
+                    "query_time": single_result.get("query_time"),
+                    "data": single_result.get("data"),
+                }
+            )
+            success_count += 1
+        except ValueError as e:
+            results.append(
+                {
+                    "product_id": product_id,
+                    "success": False,
+                    "error": str(e),
+                }
+            )
+        except HTTPException as e:
+            results.append(
+                {
+                    "product_id": product_id,
+                    "success": False,
+                    "error": e.detail,
+                }
+            )
+        except Exception as e:
+            logger.error(f"❌ 批量上架单条失败 product_id={product_id}: {e}", exc_info=True)
+            results.append(
+                {
+                    "product_id": product_id,
+                    "success": False,
+                    "error": str(e),
+                }
+            )
+
+    failed_count = len(results) - success_count
+    return {
+        "success": True,
+        "summary": {
+            "total": len(results),
+            "success": success_count,
+            "failed": failed_count,
+        },
+        "results": results,
+        "message": f"批量上架执行完成：成功 {success_count} 条，失败 {failed_count} 条",
+    }
+
+
+@app.get("/api/templates")
+async def list_templates():
+    templates = load_templates()
+    templates.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    return {
+        "success": True,
+        "data": templates,
+        "count": len(templates),
+    }
+
+
+@app.post("/api/templates")
+async def create_template(payload: Dict[str, Any]):
+    name = payload.get("name")
+    description = payload.get("description")
+    source = payload.get("source") or "manual"
+    template_data = payload.get("template_data")
+
+    if not isinstance(name, str) or not name.strip():
+        raise HTTPException(status_code=400, detail="name 为必填")
+    if len(name.strip()) > 80:
+        raise HTTPException(status_code=400, detail="name 长度不能超过 80")
+    if description is not None and not isinstance(description, str):
+        raise HTTPException(status_code=400, detail="description 必须是字符串")
+
+    try:
+        normalized_template_data = normalize_template_data(template_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    now = datetime.now().isoformat()
+    template_record = {
+        "template_id": f"tpl_{uuid.uuid4().hex[:12]}",
+        "name": name.strip(),
+        "description": (description or "").strip(),
+        "source": str(source),
+        "template_data": normalized_template_data,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    templates = load_templates()
+    templates.append(template_record)
+    save_templates(templates)
 
     return {
         "success": True,
-        "data": api_result.get("data"),
-        "raw": api_result,
-        "message": api_result.get("msg", "OK"),
-        "query_time": f"{elapsed:.2f}s",
-        "is_async": True,
+        "data": template_record,
+        "message": "模板创建成功",
+    }
+
+
+@app.delete("/api/templates/{template_id}")
+async def delete_template(template_id: str):
+    templates = load_templates()
+    filtered_templates = [item for item in templates if item.get("template_id") != template_id]
+
+    if len(filtered_templates) == len(templates):
+        raise HTTPException(status_code=404, detail="模板不存在")
+
+    save_templates(filtered_templates)
+    return {
+        "success": True,
+        "message": "模板已删除",
     }
 
 
