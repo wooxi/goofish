@@ -14,15 +14,15 @@
           class="sidebar-menu"
           @select="handleMenuSelect"
         >
-          <el-menu-item index="config">⚙️ API 配置</el-menu-item>
-          <el-menu-item index="shops">🏪 店铺信息查询</el-menu-item>
-          <el-menu-item index="products">📦 商品列表查询</el-menu-item>
-          <el-menu-item index="orders">🧾 订单信息查询</el-menu-item>
-          <el-menu-item index="batchPublish">📚 批量上架工作台</el-menu-item>
-          <el-menu-item index="templates">🧩 模板快捷创建</el-menu-item>
-          <el-menu-item index="create">➕ 商品创建</el-menu-item>
+          <el-menu-item index="config">⚙️ 账号授权配置</el-menu-item>
+          <el-menu-item index="shops">🏪 已绑定店铺</el-menu-item>
+          <el-menu-item index="products">📦 商品管理</el-menu-item>
+          <el-menu-item index="orders">🧾 订单查询</el-menu-item>
+          <el-menu-item index="batchPublish">📚 批量上架</el-menu-item>
+          <el-menu-item index="templates">🧩 模板中心</el-menu-item>
+          <el-menu-item index="create">➕ 创建商品</el-menu-item>
           <el-menu-item index="publish">🚀 商品上架</el-menu-item>
-          <el-menu-item index="callback">📨 回调状态</el-menu-item>
+          <el-menu-item index="callback">📨 任务回执</el-menu-item>
         </el-menu>
       </el-aside>
 
@@ -36,7 +36,7 @@
         <el-card v-show="activeMenu === 'config'" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>⚙️ API 配置</span>
+              <span>⚙️ 账号授权配置</span>
               <el-button type="primary" @click="saveConfig" :loading="saving">💾 保存配置</el-button>
             </div>
           </template>
@@ -94,17 +94,17 @@
         <el-card v-show="activeMenu === 'shops'" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>🏪 店铺信息查询</span>
+              <span>🏪 已绑定店铺</span>
               <div class="header-actions">
-                <el-button type="success" @click="queryShops" :loading="querying">🔍 查询店铺</el-button>
-                <el-button @click="refreshShops" :loading="querying" :disabled="!configReady">🔄 重新获取</el-button>
+                <el-button type="success" @click="queryShops" :loading="querying">🔍 获取店铺</el-button>
+                <el-button @click="refreshShops" :loading="querying" :disabled="!configReady">🔄 刷新结果</el-button>
               </div>
             </div>
           </template>
 
           <el-alert
             v-if="!configReady"
-            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            title="请先完成账号授权配置（AppKey + AppSecret）"
             type="warning"
             show-icon
             class="mb-4"
@@ -144,7 +144,7 @@
                     <el-descriptions :column="2" border>
                       <el-descriptions-item label="授权 ID">{{ props.row.authorize_id }}</el-descriptions-item>
                       <el-descriptions-item label="商家 ID">{{ props.row.seller_id || '-' }}</el-descriptions-item>
-                      <el-descriptions-item label="业务类型">{{ props.row.item_biz_types || '-' }}</el-descriptions-item>
+                      <el-descriptions-item label="可经营类目">{{ props.row.item_biz_types || '-' }}</el-descriptions-item>
                       <el-descriptions-item label="授权过期">{{ props.row.authorize_expires_str || '-' }}</el-descriptions-item>
                     </el-descriptions>
                   </div>
@@ -197,17 +197,17 @@
         <el-card v-show="activeMenu === 'products'" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>📦 商品列表查询</span>
+              <span>📦 商品管理</span>
               <div class="header-actions">
-                <el-button type="success" @click="queryProducts" :loading="queryingProducts">🔍 查询商品</el-button>
-                <el-button @click="refreshProducts" :loading="queryingProducts" :disabled="!configReady">🔄 重新获取</el-button>
+                <el-button type="success" @click="queryProducts" :loading="queryingProducts">🔍 获取商品</el-button>
+                <el-button @click="refreshProducts" :loading="queryingProducts" :disabled="!configReady">🔄 刷新结果</el-button>
               </div>
             </div>
           </template>
 
           <el-alert
             v-if="!configReady"
-            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            title="请先完成账号授权配置（AppKey + AppSecret）"
             type="warning"
             show-icon
             class="mb-4"
@@ -289,17 +289,17 @@
         <el-card v-show="activeMenu === 'orders'" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>🧾 订单信息查询</span>
+              <span>🧾 订单查询</span>
               <div class="header-actions">
-                <el-button type="success" @click="queryOrders" :loading="queryingOrders">🔍 查询订单</el-button>
-                <el-button @click="refreshOrders" :loading="queryingOrders" :disabled="!configReady">🔄 重新获取</el-button>
+                <el-button type="success" @click="queryOrders" :loading="queryingOrders">🔍 获取订单</el-button>
+                <el-button @click="refreshOrders" :loading="queryingOrders" :disabled="!configReady">🔄 刷新结果</el-button>
               </div>
             </div>
           </template>
 
           <el-alert
             v-if="!configReady"
-            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            title="请先完成账号授权配置（AppKey + AppSecret）"
             type="warning"
             show-icon
             class="mb-4"
@@ -359,7 +359,7 @@
         <el-card v-show="activeMenu === 'batchPublish'" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>📚 批量上架工作台</span>
+              <span>📚 批量上架</span>
               <div class="header-actions">
                 <el-button type="success" @click="queryProducts" :loading="queryingProducts">🔍 拉取可上架商品</el-button>
                 <el-button @click="activeMenu = 'products'">📦 去勾选商品</el-button>
@@ -369,7 +369,7 @@
 
           <el-alert
             v-if="!configReady"
-            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            title="请先完成账号授权配置（AppKey + AppSecret）"
             type="warning"
             show-icon
             class="mb-4"
@@ -378,7 +378,7 @@
           <div class="feature-grid mb-4">
             <div class="feature-item">
               <div class="title">执行方式</div>
-              <div class="desc">后端会按 product_id 顺序逐条调用 publish 接口，并返回逐条结果。</div>
+              <div class="desc">系统会按勾选顺序逐条提交上架，并展示每条结果。</div>
             </div>
             <div class="feature-item">
               <div class="title">当前勾选</div>
@@ -386,13 +386,35 @@
             </div>
           </div>
 
+          <el-alert
+            v-if="!hasBoundShops"
+            :title="shopBindingHint"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+
           <el-form label-width="150px" class="compact-form panel-form mb-4">
             <div class="form-grid publish-grid">
-              <el-form-item label="闲鱼会员名 user_name" required>
-                <el-input v-model.trim="batchPublishForm.user_name" placeholder="tbxxxx" />
-              </el-form-item>
-              <el-form-item label="回调地址 notify_url">
-                <el-input v-model.trim="batchPublishForm.notify_url" placeholder="可选" />
+              <el-form-item label="上架店铺账号" required>
+                <el-select
+                  v-model="batchPublishForm.user_name"
+                  filterable
+                  allow-create
+                  clearable
+                  default-first-option
+                  placeholder="请选择或输入店铺账号"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="shop in shopOptions"
+                    :key="shop.user_name"
+                    :label="shop.label"
+                    :value="shop.user_name"
+                  />
+                </el-select>
+                <div class="field-meta">{{ shopBindingHint }}（技术字段：user_name）</div>
               </el-form-item>
               <el-form-item label="定时上架时间">
                 <el-input v-model.trim="batchPublishForm.specify_publish_time" placeholder="可选，如 2026-03-14 12:30:00" />
@@ -417,7 +439,7 @@
             </el-table>
           </div>
 
-          <el-empty v-else description="请先到“商品列表查询”勾选商品" />
+          <el-empty v-else description="请先到“商品管理”页勾选商品" />
 
           <div v-if="batchPublishResult" class="batch-result-wrap">
             <div class="result-info">
@@ -458,7 +480,7 @@
         <el-card v-show="activeMenu === 'templates'" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>🧩 模板快捷创建</span>
+              <span>🧩 模板中心</span>
               <div class="header-actions">
                 <el-button @click="loadTemplates()" :loading="templatesLoading">🔄 刷新模板</el-button>
                 <el-button type="primary" @click="activeMenu = 'create'">➕ 去创建商品</el-button>
@@ -467,7 +489,7 @@
           </template>
 
           <el-alert
-            title="支持：新增模板、基于当前表单保存、删除模板、应用模板；也支持从已选商品生成简化模板。"
+            title="你可以新增模板、保存当前表单、删除模板或一键套用；也支持从已选商品快速生成模板。"
             type="info"
             show-icon
             :closable="false"
@@ -475,7 +497,7 @@
           />
 
           <el-alert
-            title="从已有商品生成模板为简化版：商品列表不含完整详情（如图片/长描述）时，会沿用当前创建表单中的对应字段。"
+            title="从已有商品生成模板时，若列表里缺少完整详情（如图片、长描述），会自动沿用当前表单内容。"
             type="warning"
             show-icon
             :closable="false"
@@ -524,7 +546,7 @@
         <el-card v-show="activeMenu === 'create'" class="panel-card create-panel-card">
           <template #header>
             <div class="card-header">
-              <span>➕ 商品创建</span>
+              <span>➕ 创建商品</span>
               <div class="header-actions">
                 <el-button text @click="fillCreateExample">示例填充（可选）</el-button>
                 <el-button text @click="resetCreateForm">重置</el-button>
@@ -534,7 +556,7 @@
 
           <el-alert
             v-if="!configReady"
-            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            title="请先完成账号授权配置（AppKey + AppSecret）"
             type="warning"
             show-icon
             class="mb-4"
@@ -542,8 +564,25 @@
 
           <section class="create-guide">
             <div class="create-guide-title">创建商品工作台</div>
-            <p>按 create 接口标准字段填写。左侧完成分块表单，右侧实时检查必填状态与字段约束，提交前可快速自检。</p>
+            <p>按页面提示填写商品信息。左侧完成表单，右侧会实时提示必填项是否完善。</p>
           </section>
+
+          <el-alert
+            v-if="!hasBoundShops"
+            :title="shopBindingHint"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+          <el-alert
+            v-else
+            :title="shopBindingHint"
+            type="success"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
 
           <div class="create-workspace">
             <div class="create-main">
@@ -554,27 +593,38 @@
                     <span class="section-badge required">必填</span>
                   </div>
                   <div class="form-grid">
-                    <el-form-item class="key-field required-field" label="商品类型 item_biz_type" required>
-                      <el-select v-model="createForm.item_biz_type" placeholder="请选择" style="width: 100%">
-                        <el-option v-for="item in ITEM_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
+                    <el-form-item class="key-field required-field" label="商品类型" required>
+                      <el-select v-model="createForm.item_biz_type" placeholder="请选择商品类型" style="width: 100%">
+                        <el-option
+                          v-for="item in ITEM_BIZ_TYPE_OPTIONS"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
                       </el-select>
+                      <div class="field-meta">技术字段：item_biz_type</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="行业类型 sp_biz_type" required>
-                      <el-select v-model="createForm.sp_biz_type" placeholder="请选择" style="width: 100%">
+                    <el-form-item class="key-field required-field" label="行业类目" required>
+                      <el-select v-model="createForm.sp_biz_type" placeholder="请选择行业类目" style="width: 100%">
                         <el-option v-for="item in SP_BIZ_TYPE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
                       </el-select>
+                      <div class="field-meta">技术字段：sp_biz_type</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="类目ID channel_cat_id" required>
-                      <el-input v-model.trim="createForm.channel_cat_id" placeholder="如：e11455..." />
+                    <el-form-item class="key-field required-field" label="类目编号" required>
+                      <el-input v-model.trim="createForm.channel_cat_id" placeholder="例如：e11455..." />
+                      <div class="field-meta">技术字段：channel_cat_id</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="售价 price(分)" required>
+                    <el-form-item class="key-field required-field" label="售价（分）" required>
                       <el-input-number v-model="createForm.price" :min="1" :max="9999999900" :step="1" style="width: 100%" />
+                      <div class="field-meta">100 分 = 1 元，技术字段：price</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="运费 express_fee(分)" required>
+                    <el-form-item class="key-field required-field" label="运费（分）" required>
                       <el-input-number v-model="createForm.express_fee" :step="1" style="width: 100%" />
+                      <div class="field-meta">技术字段：express_fee</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="库存 stock" required>
+                    <el-form-item class="key-field required-field" label="库存数量" required>
                       <el-input-number v-model="createForm.stock" :min="1" :max="399960" :step="1" style="width: 100%" />
+                      <div class="field-meta">技术字段：stock</div>
                     </el-form-item>
                   </div>
                 </section>
@@ -585,20 +635,40 @@
                     <span class="section-badge required">必填</span>
                   </div>
                   <div class="form-grid">
-                    <el-form-item class="key-field required-field" label="闲鱼会员名 user_name" required>
-                      <el-input v-model.trim="createForm.publish_shop.user_name" placeholder="tbxxxx" />
+                    <el-form-item class="key-field required-field" label="发布店铺账号" required>
+                      <el-select
+                        v-model="createForm.publish_shop.user_name"
+                        filterable
+                        allow-create
+                        clearable
+                        default-first-option
+                        placeholder="请选择或输入店铺账号"
+                        style="width: 100%"
+                      >
+                        <el-option
+                          v-for="shop in shopOptions"
+                          :key="shop.user_name"
+                          :label="shop.label"
+                          :value="shop.user_name"
+                        />
+                      </el-select>
+                      <div class="field-meta">{{ shopBindingHint }}（技术字段：publish_shop.user_name）</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="发货省 province" required>
+                    <el-form-item class="key-field required-field" label="发货省份编码" required>
                       <el-input-number v-model="createForm.publish_shop.province" :step="1" style="width: 100%" />
+                      <div class="field-meta">技术字段：publish_shop.province</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="发货市 city" required>
+                    <el-form-item class="key-field required-field" label="发货城市编码" required>
                       <el-input-number v-model="createForm.publish_shop.city" :step="1" style="width: 100%" />
+                      <div class="field-meta">技术字段：publish_shop.city</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="发货区 district" required>
+                    <el-form-item class="key-field required-field" label="发货区县编码" required>
                       <el-input-number v-model="createForm.publish_shop.district" :step="1" style="width: 100%" />
+                      <div class="field-meta">技术字段：publish_shop.district</div>
                     </el-form-item>
-                    <el-form-item class="key-field required-field" label="标题 title" required>
+                    <el-form-item class="key-field required-field" label="商品标题" required>
                       <el-input v-model.trim="createForm.publish_shop.title" maxlength="60" show-word-limit />
+                      <div class="field-meta">技术字段：publish_shop.title</div>
                     </el-form-item>
                   </div>
                 </section>
@@ -608,17 +678,18 @@
                     <div class="section-title">图片与描述</div>
                     <span class="section-badge required">必填</span>
                   </div>
-                  <el-form-item class="key-field required-field" label="描述 content" required>
+                  <el-form-item class="key-field required-field" label="商品描述" required>
                     <el-input v-model="createForm.publish_shop.content" type="textarea" :rows="4" maxlength="5000" show-word-limit />
+                    <div class="field-meta">技术字段：publish_shop.content</div>
                   </el-form-item>
-                  <el-form-item class="key-field required-field" label="图片 URLs" required>
+                  <el-form-item class="key-field required-field" label="商品图片链接" required>
                     <el-input
                       v-model="createForm.publish_shop.images_text"
                       type="textarea"
                       :rows="4"
-                      placeholder="每行一个 URL（或逗号分隔）"
+                      placeholder="每行一个图片链接，或使用逗号分隔"
                     />
-                    <div class="field-meta">当前解析图片：{{ createImages.length }} 张</div>
+                    <div class="field-meta">当前已识别 {{ createImages.length }} 张（技术字段：publish_shop.images）</div>
                   </el-form-item>
                 </section>
 
@@ -627,15 +698,15 @@
                     <el-collapse-item name="advanced">
                       <template #title>
                         <div class="collapse-title-row">
-                          <span class="section-title">可选高级参数</span>
+                          <span class="section-title">可选高级设置</span>
                           <span class="section-badge optional">默认收起</span>
                         </div>
                       </template>
-                      <el-form-item label="高级模式">
+                      <el-form-item label="启用高级补充">
                         <el-switch v-model="createAdvancedEnabled" />
-                        <span class="switch-tip">附加扩展 JSON（可选）</span>
+                        <span class="switch-tip">用于补充额外字段（可选）</span>
                       </el-form-item>
-                      <el-form-item v-if="createAdvancedEnabled" label="扩展 JSON">
+                      <el-form-item v-if="createAdvancedEnabled" label="补充信息（JSON）">
                         <el-input
                           v-model="createAdvancedJson"
                           type="textarea"
@@ -668,7 +739,7 @@
 
             <aside class="create-check-card">
               <div class="create-check-header">提交前检查</div>
-              <div class="create-check-sub">必填状态与关键规则实时校验（提交时仍以接口校验为准）</div>
+              <div class="create-check-sub">必填状态与关键规则实时校验，提交前可快速自检</div>
 
               <ul class="create-check-list">
                 <li
@@ -684,7 +755,7 @@
               </ul>
 
               <div class="create-constraint-box">
-                <div class="constraint-title">字段约束提示</div>
+                <div class="constraint-title">填写提醒</div>
                 <ul>
                   <li v-for="tip in CREATE_CONSTRAINT_TIPS" :key="tip">{{ tip }}</li>
                 </ul>
@@ -704,19 +775,36 @@
 
           <el-alert
             v-if="!configReady"
-            title="请先配置 AppKey，并确保后端已有可用 AppSecret"
+            title="请先完成账号授权配置（AppKey + AppSecret）"
             type="warning"
             show-icon
             class="mb-4"
           />
 
-          <p class="op-tip">按接口最小必填字段提交；接口为异步处理，结果看回调状态页。</p>
+          <p class="op-tip">填写商品与店铺后即可提交，处理结果会出现在“任务回执”页。</p>
 
           <div class="required-hint">
-            <div class="hint-title">最小必填字段（publish）</div>
-            <div class="hint-content">product_id + user_name（数组）</div>
-            <div class="hint-sub">当前页面输入单个 user_name，提交时自动按接口规范转换为 user_name: ["..."]。</div>
+            <div class="hint-title">必填信息</div>
+            <div class="hint-content">商品ID + 店铺账号</div>
+            <div class="hint-sub">页面仅需填写一个店铺账号，系统会自动按平台要求处理。</div>
           </div>
+
+          <el-alert
+            v-if="!hasBoundShops"
+            :title="shopBindingHint"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
+          <el-alert
+            v-else
+            :title="shopBindingHint"
+            type="success"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
 
           <el-form label-width="140px" class="compact-form panel-form">
             <section class="form-section">
@@ -725,11 +813,28 @@
                 <span class="section-badge required">必填</span>
               </div>
               <div class="form-grid publish-grid">
-                <el-form-item class="key-field" label="商品ID product_id" required>
+                <el-form-item class="key-field" label="商品ID" required>
                   <el-input-number v-model="publishForm.product_id" :min="1" :step="1" style="width: 100%" />
+                  <div class="field-meta">技术字段：product_id</div>
                 </el-form-item>
-                <el-form-item class="key-field" label="闲鱼会员名 user_name" required>
-                  <el-input v-model.trim="publishForm.user_name" placeholder="tbxxxx" />
+                <el-form-item class="key-field" label="上架店铺账号" required>
+                  <el-select
+                    v-model="publishForm.user_name"
+                    filterable
+                    allow-create
+                    clearable
+                    default-first-option
+                    placeholder="请选择或输入店铺账号"
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="shop in shopOptions"
+                      :key="shop.user_name"
+                      :label="shop.label"
+                      :value="shop.user_name"
+                    />
+                  </el-select>
+                  <div class="field-meta">{{ shopBindingHint }}（技术字段：user_name）</div>
                 </el-form-item>
               </div>
             </section>
@@ -750,26 +855,21 @@
                         v-model.trim="publishForm.specify_publish_time"
                         placeholder="可选，如：2026-03-14 12:30:00"
                       />
-                    </el-form-item>
-                    <el-form-item label="回调地址 notify_url">
-                      <el-input
-                        v-model.trim="publishForm.notify_url"
-                        placeholder="可选，建议填写后端回调接收地址"
-                      />
+                      <div class="field-meta">技术字段：specify_publish_time</div>
                     </el-form-item>
                   </div>
 
-                  <el-form-item label="高级模式">
+                  <el-form-item label="启用高级补充">
                     <el-switch v-model="publishAdvancedEnabled" />
-                    <span class="switch-tip">附加扩展 JSON（可选）</span>
+                    <span class="switch-tip">用于补充额外字段（可选）</span>
                   </el-form-item>
-                  <el-form-item v-if="publishAdvancedEnabled" label="扩展 JSON">
+                  <el-form-item v-if="publishAdvancedEnabled" label="补充信息（JSON）">
                     <el-input
                       v-model="publishAdvancedJson"
                       type="textarea"
                       :rows="8"
                       class="json-input"
-                      placeholder='例如：{"notify_url":"https://xxx/callback"}'
+                      placeholder='例如：{"specify_publish_time":"2026-03-14 12:30:00"}'
                     />
                   </el-form-item>
                 </el-collapse-item>
@@ -797,13 +897,13 @@
         <el-card v-show="activeMenu === 'callback'" class="panel-card">
           <template #header>
             <div class="card-header">
-              <span>📨 商品回调状态（最近记录）</span>
+              <span>📨 任务回执（最近记录）</span>
               <el-button size="small" @click="loadCallbackRecords" :loading="callbackLoading">🔄 刷新</el-button>
             </div>
           </template>
 
           <div class="callback-header-row">
-            <span class="callback-tip">字段：task_type / task_result / err_code / err_msg / task_time 等</span>
+            <span class="callback-tip">展示任务状态、失败原因、处理时间等关键信息</span>
           </div>
 
           <el-alert
@@ -819,14 +919,14 @@
               <el-table-column prop="received_at" label="接收时间" width="180">
               <template #default="scope">{{ formatDateTime(scope.row.received_at) }}</template>
             </el-table-column>
-            <el-table-column prop="task_type" label="task_type" width="120" />
-            <el-table-column prop="task_result" label="task_result" width="120" />
-            <el-table-column prop="err_code" label="err_code" width="150" />
-            <el-table-column prop="err_msg" label="err_msg" min-width="220" show-overflow-tooltip />
-            <el-table-column prop="product_id" label="product_id" width="140" />
-            <el-table-column prop="publish_status" label="publish_status" width="130" />
-            <el-table-column prop="user_name" label="user_name" width="150" />
-              <el-table-column prop="task_time" label="task_time" width="180">
+            <el-table-column prop="task_type" label="任务类型" width="120" />
+            <el-table-column prop="task_result" label="执行结果" width="120" />
+            <el-table-column prop="err_code" label="错误代码" width="150" />
+            <el-table-column prop="err_msg" label="失败原因" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="product_id" label="商品ID" width="140" />
+            <el-table-column prop="publish_status" label="上架状态" width="130" />
+            <el-table-column prop="user_name" label="店铺账号" width="150" />
+              <el-table-column prop="task_time" label="处理时间" width="180">
                 <template #default="scope">{{ formatCallbackTime(scope.row.task_time) }}</template>
               </el-table-column>
             </el-table>
@@ -838,7 +938,7 @@
 
     <footer class="status-bar">
       <span v-if="lastQueryTime">最后店铺查询：{{ lastQueryTime }}</span>
-      <span>后端状态：{{ backendStatus }}</span>
+      <span>服务状态：{{ backendStatus }}</span>
     </footer>
   </div>
 </template>
@@ -854,39 +954,40 @@ const API_BASE = window.location.hostname === 'localhost'
 const SHOP_QUERY_CACHE_KEY = 'goofish:shops-query-cache:v1'
 const PRODUCT_QUERY_CACHE_KEY = 'goofish:products-query-cache:v1'
 const ORDER_QUERY_CACHE_KEY = 'goofish:orders-query-cache:v1'
+const INTERNAL_CALLBACK_PATH = '/api/products/callback/receive'
 
 const ITEM_BIZ_TYPE_OPTIONS = [
-  { value: 2, label: '2 - 普通商品' },
-  { value: 0, label: '0 - 已验货' },
-  { value: 10, label: '10 - 验货宝' },
-  { value: 16, label: '16 - 品牌授权' },
-  { value: 19, label: '19 - 闲鱼严选' },
-  { value: 24, label: '24 - 闲鱼特卖' },
-  { value: 26, label: '26 - 品牌捡漏' },
-  { value: 35, label: '35 - 跨境商品' },
+  { value: 2, label: '普通商品' },
+  { value: 0, label: '已验货商品' },
+  { value: 10, label: '验货宝商品' },
+  { value: 16, label: '品牌授权商品' },
+  { value: 19, label: '闲鱼严选商品' },
+  { value: 24, label: '闲鱼特卖商品' },
+  { value: 26, label: '品牌捡漏商品' },
+  { value: 35, label: '跨境商品' },
 ]
 
 const SP_BIZ_TYPE_OPTIONS = [
   1, 2, 3, 8, 9, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 33, 99,
-].map((value) => ({ value, label: String(value) }))
+].map((value) => ({ value, label: `类目 ${value}` }))
 
 const CREATE_CONSTRAINT_TIPS = [
-  'price / express_fee / stock 必须为整数。',
-  'publish_shop.title 长度需为 1~60。',
-  'publish_shop.content 长度需为 5~5000。',
-  'publish_shop.images 数量需为 1~30，且不可重复。',
+  '售价、运费、库存需填写整数。',
+  '商品标题建议控制在 60 字以内。',
+  '商品描述建议 5~5000 字。',
+  '商品图片建议 1~30 张，且不要重复。',
 ]
 
 const MENU_META = {
-  config: { title: 'API 配置', desc: '配置 appid / appsecret / seller_id，作为全部功能的基础。' },
-  shops: { title: '店铺信息查询', desc: '查询店铺授权与状态信息。' },
-  products: { title: '商品列表查询', desc: '查询商品列表、价格、库存与状态。' },
-  orders: { title: '订单信息查询', desc: '查询订单列表、金额、状态和买卖双方信息。' },
-  batchPublish: { title: '批量上架工作台', desc: '批量勾选商品后顺序调用上架接口，支持失败重试。' },
-  templates: { title: '模板快捷创建', desc: '沉淀常用字段模板，应用后可快速创建商品。' },
-  create: { title: '商品创建', desc: '按接口字段化创建商品，支持可选高级 JSON 扩展。' },
-  publish: { title: '商品上架', desc: '提交上架请求（异步），结果在回调状态查看。' },
-  callback: { title: '回调状态', desc: '查看最近商品回调记录，追踪任务状态与错误信息。' },
+  config: { title: '账号授权配置', desc: '保存 AppKey、AppSecret 等授权信息，其他功能会自动复用。' },
+  shops: { title: '已绑定店铺', desc: '查看当前授权下可用店铺，并自动选择默认店铺。' },
+  products: { title: '商品管理', desc: '查看商品列表、库存、价格和状态，并支持勾选批量上架。' },
+  orders: { title: '订单查询', desc: '查看订单金额、状态、买卖双方和下单时间。' },
+  batchPublish: { title: '批量上架', desc: '把勾选的商品批量上架，失败项可一键重试。' },
+  templates: { title: '模板中心', desc: '沉淀常用模板，快速复用创建信息。' },
+  create: { title: '创建商品', desc: '分步骤填写商品信息，支持高级补充项。' },
+  publish: { title: '上架商品', desc: '默认带出已绑定店铺，可手动切换后提交上架。' },
+  callback: { title: '任务回执', desc: '查看最近任务处理状态与失败原因。' },
 }
 
 const activeMenu = ref('config')
@@ -906,6 +1007,14 @@ function handleMenuSelect(index) {
   if (index === 'callback') {
     loadCallbackRecords(true)
   }
+
+  if (['create', 'publish', 'batchPublish'].includes(index)) {
+    ensureBoundShopsReady()
+  }
+}
+
+function getInternalCallbackUrl() {
+  return `${API_BASE}${INTERNAL_CALLBACK_PATH}`
 }
 
 function getDefaultCreateForm() {
@@ -933,7 +1042,7 @@ function getDefaultPublishForm() {
     product_id: null,
     user_name: '',
     specify_publish_time: '',
-    notify_url: `${API_BASE}/api/products/callback/receive`,
+    notify_url: getInternalCallbackUrl(),
   }
 }
 
@@ -985,6 +1094,76 @@ const shopsFetchedAt = ref('')
 const shopsRestoredAt = ref('')
 const backendStatus = ref('检测中...')
 
+const shopOptions = computed(() => {
+  return shops.value
+    .map((shop) => {
+      const userName = String(shop?.user_name || '').trim()
+      if (!userName) return null
+      const shopName = String(shop?.shop_name || '').trim()
+      const status = shop?.is_valid ? '可用' : '需检查授权'
+      return {
+        user_name: userName,
+        shop_name: shopName,
+        is_valid: Boolean(shop?.is_valid),
+        is_deposit_enough: Boolean(shop?.is_deposit_enough),
+        is_pro: Boolean(shop?.is_pro),
+        authorize_expires: Number(shop?.authorize_expires) || 0,
+        label: shopName ? `${shopName}（${userName}）·${status}` : `${userName} · ${status}`,
+      }
+    })
+    .filter(Boolean)
+})
+
+const hasBoundShops = computed(() => shopOptions.value.length > 0)
+
+function getShopPriorityScore(shop) {
+  let score = 0
+  if (shop?.is_valid) score += 100
+  if (shop?.is_deposit_enough) score += 20
+  if (shop?.is_pro) score += 8
+
+  const expires = Number(shop?.authorize_expires) || 0
+  const now = Date.now() / 1000
+  if (expires > now) {
+    const monthsLeft = (expires - now) / 86400 / 30
+    score += Math.min(12, Math.max(0, monthsLeft))
+  }
+  return score
+}
+
+const preferredShopOption = computed(() => {
+  if (!shopOptions.value.length) return null
+  const ranked = [...shopOptions.value].sort((a, b) => getShopPriorityScore(b) - getShopPriorityScore(a))
+  return ranked[0]
+})
+
+const defaultShopUserName = computed(() => preferredShopOption.value?.user_name || '')
+
+const shopBindingHint = computed(() => {
+  if (hasBoundShops.value) {
+    const best = preferredShopOption.value
+    return best?.shop_name
+      ? `已为你优先选择「${best.shop_name}（${best.user_name}）」作为默认店铺，可随时切换。`
+      : `已为你自动选择默认店铺账号：${best?.user_name || '-'}`
+  }
+  return '暂未获取到已绑定店铺。请先到“已绑定店铺”页获取，或先手动填写店铺账号。'
+})
+
+function applyDefaultShopUserNames(force = false) {
+  const defaultUserName = defaultShopUserName.value
+  if (!defaultUserName) return
+
+  if (force || !createForm.publish_shop.user_name) {
+    createForm.publish_shop.user_name = defaultUserName
+  }
+  if (force || !publishForm.user_name) {
+    publishForm.user_name = defaultUserName
+  }
+  if (force || !batchPublishForm.user_name) {
+    batchPublishForm.user_name = defaultUserName
+  }
+}
+
 // 商品状态
 const queryingProducts = ref(false)
 const products = ref([])
@@ -1014,7 +1193,7 @@ const selectedProductsForBatch = computed(() => {
 const batchPublishForm = reactive({
   user_name: '',
   specify_publish_time: '',
-  notify_url: `${API_BASE}/api/products/callback/receive`,
+  notify_url: getInternalCallbackUrl(),
 })
 const batchPublishing = ref(false)
 const batchRetryingFailed = ref(false)
@@ -1119,33 +1298,33 @@ const createChecklist = computed(() => {
   return [
     {
       key: 'basic',
-      label: '基础参数完整',
+      label: '基础信息已完善',
       ok: basicOk,
-      hint: 'item_biz_type / sp_biz_type / channel_cat_id / price / express_fee / stock',
+      hint: '商品类型、行业类目、类目编号、售价、运费、库存',
     },
     {
       key: 'shop',
-      label: '发布店铺信息完整',
+      label: '发布店铺信息已完善',
       ok: shopOk,
-      hint: 'publish_shop.user_name + province/city/district',
+      hint: '店铺账号 + 省/市/区编码',
     },
     {
       key: 'content',
       label: '标题与描述符合规则',
       ok: textOk,
-      hint: `title ${shop.title?.length || 0}/60，content ${shop.content?.length || 0}/5000`,
+      hint: `标题 ${shop.title?.length || 0}/60，描述 ${shop.content?.length || 0}/5000`,
     },
     {
       key: 'images',
-      label: '图片数量与去重校验',
+      label: '图片数量和去重通过',
       ok: imagesOk,
-      hint: `已解析 ${createImages.value.length} 张，要求 1~30 且不能重复`,
+      hint: `已识别 ${createImages.value.length} 张，建议 1~30 张且不重复`,
     },
     {
       key: 'advanced',
-      label: '高级 JSON 配置合法',
+      label: '高级补充格式正确',
       ok: createAdvancedJsonValid.value,
-      hint: createAdvancedEnabled.value ? '已启用高级模式，JSON 必须为对象' : '未启用高级模式，可忽略',
+      hint: createAdvancedEnabled.value ? '已启用高级补充，内容需为 JSON 对象' : '未启用高级补充，可忽略',
     },
   ]
 })
@@ -1163,8 +1342,15 @@ onMounted(async () => {
   await checkBackend()
   await loadConfig()
   restoreShopsCache()
+  applyDefaultShopUserNames()
   restoreProductsCache()
   restoreOrdersCache()
+
+  if (configReady.value && !hasBoundShops.value) {
+    await queryShops(false, true)
+  }
+
+  applyDefaultShopUserNames()
   await loadTemplates(true)
   await loadCallbackRecords(true)
   callbackTimer = setInterval(() => {
@@ -1261,6 +1447,7 @@ function restoreShopsCache() {
     queryTime.value = typeof cache.query_time === 'string' ? cache.query_time : ''
     shopsFetchedAt.value = typeof cache.queried_at === 'string' ? cache.queried_at : ''
     shopsRestoredAt.value = shopsFetchedAt.value || formatDateTime(cache.cached_at)
+    applyDefaultShopUserNames()
   } catch (e) {
     console.warn('店铺查询缓存恢复失败，已忽略:', e)
     localStorage.removeItem(SHOP_QUERY_CACHE_KEY)
@@ -1345,6 +1532,15 @@ function restoreOrdersCache() {
     console.warn('订单查询缓存恢复失败，已忽略:', e)
     localStorage.removeItem(ORDER_QUERY_CACHE_KEY)
   }
+}
+
+async function ensureBoundShopsReady() {
+  if (!configReady.value || hasBoundShops.value || querying.value) {
+    applyDefaultShopUserNames()
+    return
+  }
+  await queryShops(false, true)
+  applyDefaultShopUserNames()
 }
 
 function refreshProducts() {
@@ -1498,7 +1694,7 @@ async function createBlankTemplate() {
       express_fee: 0,
       stock: 1,
       publish_shop: {
-        user_name: '',
+        user_name: defaultShopUserName.value || '',
         title: '',
         content: '',
         images: [],
@@ -1551,6 +1747,7 @@ async function createTemplateFromSelectedProduct() {
 function applyTemplate(template) {
   try {
     applyTemplateData(template.template_data || {})
+    applyDefaultShopUserNames()
     activeMenu.value = 'create'
     ElMessage.success(`已应用模板：${template.name}`)
   } catch (e) {
@@ -1577,11 +1774,9 @@ function buildBatchPublishPayload(productIds) {
   const payload = {
     product_ids: productIds,
     user_name: (batchPublishForm.user_name || '').trim(),
+    notify_url: getInternalCallbackUrl(),
   }
 
-  if (batchPublishForm.notify_url && batchPublishForm.notify_url.trim()) {
-    payload.notify_url = batchPublishForm.notify_url.trim()
-  }
   if (batchPublishForm.specify_publish_time && batchPublishForm.specify_publish_time.trim()) {
     payload.specify_publish_time = batchPublishForm.specify_publish_time.trim()
   }
@@ -1590,8 +1785,10 @@ function buildBatchPublishPayload(productIds) {
 }
 
 async function submitBatchPublish(productIds = null) {
+  applyDefaultShopUserNames()
+
   if (!configReady.value) {
-    ElMessage.warning('请先完成 API 配置')
+    ElMessage.warning('请先完成账号授权配置')
     return
   }
 
@@ -1605,7 +1802,9 @@ async function submitBatchPublish(productIds = null) {
   }
 
   if (!(batchPublishForm.user_name || '').trim()) {
-    batchPublishError.value = '批量上架需要填写 user_name'
+    batchPublishError.value = hasBoundShops.value
+      ? '批量上架前请先选择店铺账号'
+      : '暂无已绑定店铺，请先到“已绑定店铺”获取店铺后再提交'
     ElMessage.error(batchPublishError.value)
     return
   }
@@ -1685,6 +1884,10 @@ async function saveConfig() {
       configLoadedFromBackend.value = true
       config.appsecret = ''
       ElMessage.success(data.secret_preserved ? '配置已保存（沿用已保存的 AppSecret）' : (data.message || '配置已保存'))
+      if (!hasBoundShops.value) {
+        await queryShops(false, true)
+      }
+      applyDefaultShopUserNames()
     } else {
       ElMessage.error(data.detail || '保存失败')
     }
@@ -1696,9 +1899,9 @@ async function saveConfig() {
 }
 
 // 查询店铺
-async function queryShops(forceRefresh = false) {
+async function queryShops(forceRefresh = false, silent = false) {
   if (!configReady.value) {
-    ElMessage.warning('请先完成 API 配置')
+    if (!silent) ElMessage.warning('请先完成账号授权配置')
     return
   }
 
@@ -1719,17 +1922,22 @@ async function queryShops(forceRefresh = false) {
       queryTime.value = data.query_time || ''
       shopsFetchedAt.value = new Date().toLocaleString('zh-CN')
 
+      applyDefaultShopUserNames()
       persistShopsCache()
 
-      const actionText = forceRefresh ? '重新获取成功，缓存已更新' : '查询成功'
-      ElMessage.success(`${actionText}，共 ${shops.value.length} 个店铺`)
+      if (shops.value.length === 0) {
+        if (!silent) ElMessage.warning('暂未查到可用店铺，请先确认店铺授权是否完成。')
+      } else if (!silent) {
+        const actionText = forceRefresh ? '已刷新店铺信息' : '已获取店铺信息'
+        ElMessage.success(`${actionText}，共 ${shops.value.length} 个店铺`)
+      }
     } else {
-      lastError.value = data.detail || '查询失败'
-      ElMessage.error(lastError.value)
+      lastError.value = data.detail || '获取店铺失败'
+      if (!silent) ElMessage.error(lastError.value)
     }
   } catch (e) {
-    lastError.value = '查询失败：' + e.message
-    ElMessage.error(lastError.value)
+    lastError.value = '获取店铺失败：' + e.message
+    if (!silent) ElMessage.error(lastError.value)
   } finally {
     querying.value = false
   }
@@ -1738,7 +1946,7 @@ async function queryShops(forceRefresh = false) {
 // 查询商品
 async function queryProducts(forceRefresh = false) {
   if (!configReady.value) {
-    ElMessage.warning('请先完成 API 配置')
+    ElMessage.warning('请先完成账号授权配置')
     return
   }
 
@@ -1763,11 +1971,11 @@ async function queryProducts(forceRefresh = false) {
       const actionText = forceRefresh ? '重新获取成功，缓存已更新' : '查询成功'
       ElMessage.success(`${actionText}，共 ${products.value.length} 条记录`)
     } else {
-      productsError.value = data.detail || '查询失败'
+      productsError.value = data.detail || '获取失败'
       ElMessage.error(productsError.value)
     }
   } catch (e) {
-    productsError.value = '查询失败：' + e.message
+    productsError.value = '获取失败：' + e.message
     ElMessage.error(productsError.value)
   } finally {
     queryingProducts.value = false
@@ -1776,7 +1984,7 @@ async function queryProducts(forceRefresh = false) {
 
 async function queryOrders(forceRefresh = false) {
   if (!configReady.value) {
-    ElMessage.warning('请先完成 API 配置')
+    ElMessage.warning('请先完成账号授权配置')
     return
   }
 
@@ -1800,11 +2008,11 @@ async function queryOrders(forceRefresh = false) {
       const actionText = forceRefresh ? '重新获取成功，缓存已更新' : '查询成功'
       ElMessage.success(`${actionText}，共 ${orders.value.length} 条记录`)
     } else {
-      ordersError.value = data.detail || '查询失败'
+      ordersError.value = data.detail || '获取失败'
       ElMessage.error(ordersError.value)
     }
   } catch (e) {
-    ordersError.value = '查询失败：' + e.message
+    ordersError.value = '获取失败：' + e.message
     ElMessage.error(ordersError.value)
   } finally {
     queryingOrders.value = false
@@ -1859,33 +2067,37 @@ function parseImages(text) {
 
 function validateCreateForm() {
   if (!ITEM_BIZ_TYPE_OPTIONS.some((item) => item.value === createForm.item_biz_type)) {
-    return 'item_biz_type 不在文档枚举范围内'
+    return '请选择有效的商品类型'
   }
   if (!SP_BIZ_TYPE_OPTIONS.some((item) => item.value === createForm.sp_biz_type)) {
-    return 'sp_biz_type 不在文档枚举范围内'
+    return '请选择有效的行业类目'
   }
-  if (!createForm.channel_cat_id) return 'channel_cat_id 为必填'
+  if (!createForm.channel_cat_id) return '请填写类目编号'
   if (!isInteger(createForm.price) || createForm.price < 1 || createForm.price > 9999999900) {
-    return 'price 必须是整数，范围 1~9999999900'
+    return '售价需为整数，范围 1~9999999900（分）'
   }
-  if (!isInteger(createForm.express_fee)) return 'express_fee 必须是整数'
+  if (!isInteger(createForm.express_fee)) return '运费需为整数（分）'
   if (!isInteger(createForm.stock) || createForm.stock < 1 || createForm.stock > 399960) {
-    return 'stock 必须是整数，范围 1~399960'
+    return '库存需为整数，范围 1~399960'
   }
 
   const shop = createForm.publish_shop
-  if (!shop.user_name) return 'publish_shop.user_name 为必填'
-  if (!isInteger(shop.province)) return 'publish_shop.province 必须是整数'
-  if (!isInteger(shop.city)) return 'publish_shop.city 必须是整数'
-  if (!isInteger(shop.district)) return 'publish_shop.district 必须是整数'
-  if (!shop.title || shop.title.length > 60) return 'publish_shop.title 长度需为 1~60'
+  if (!shop.user_name) {
+    return hasBoundShops.value
+      ? '请先选择发布店铺账号'
+      : '暂无已绑定店铺，请先到“已绑定店铺”获取店铺后再提交'
+  }
+  if (!isInteger(shop.province)) return '请填写发货省份编码'
+  if (!isInteger(shop.city)) return '请填写发货城市编码'
+  if (!isInteger(shop.district)) return '请填写发货区县编码'
+  if (!shop.title || shop.title.length > 60) return '商品标题长度需为 1~60 字'
   if (!shop.content || shop.content.length < 5 || shop.content.length > 5000) {
-    return 'publish_shop.content 长度需为 5~5000'
+    return '商品描述长度需为 5~5000 字'
   }
 
   const images = parseImages(shop.images_text)
-  if (images.length < 1 || images.length > 30) return 'publish_shop.images 数量需为 1~30'
-  if (new Set(images).size !== images.length) return 'publish_shop.images 不能包含重复项'
+  if (images.length < 1 || images.length > 30) return '请提供 1~30 张商品图片链接'
+  if (new Set(images).size !== images.length) return '商品图片链接存在重复，请检查'
 
   return ''
 }
@@ -1918,14 +2130,15 @@ function buildCreatePayload() {
 
 function validatePublishForm() {
   if (!isInteger(publishForm.product_id) || publishForm.product_id <= 0) {
-    return 'product_id 必须是正整数'
+    return '请填写正确的商品ID'
   }
-  if (!publishForm.user_name) return 'user_name 为必填'
+  if (!publishForm.user_name) {
+    return hasBoundShops.value
+      ? '请选择上架店铺账号'
+      : '暂无已绑定店铺，请先到“已绑定店铺”获取店铺后再提交'
+  }
   if (publishForm.specify_publish_time && typeof publishForm.specify_publish_time !== 'string') {
-    return 'specify_publish_time 必须是字符串'
-  }
-  if (publishForm.notify_url && typeof publishForm.notify_url !== 'string') {
-    return 'notify_url 必须是字符串'
+    return '定时上架时间格式不正确'
   }
   return ''
 }
@@ -1934,22 +2147,44 @@ function buildPublishPayload() {
   const basePayload = {
     product_id: publishForm.product_id,
     user_name: [publishForm.user_name],
+    notify_url: getInternalCallbackUrl(),
   }
 
   if (publishForm.specify_publish_time) {
     basePayload.specify_publish_time = publishForm.specify_publish_time
   }
-  if (publishForm.notify_url) {
-    basePayload.notify_url = publishForm.notify_url
-  }
 
   if (!publishAdvancedEnabled.value) return basePayload
   const extra = parseExtraJson(publishAdvancedJson.value, '上架商品')
-  return deepMerge(basePayload, extra)
+  const merged = deepMerge(basePayload, extra)
+  merged.notify_url = getInternalCallbackUrl()
+  return merged
+}
+
+function sanitizeResultForDisplay(value, parentKey = '') {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeResultForDisplay(item, parentKey))
+  }
+  if (isPlainObject(value)) {
+    return Object.keys(value).reduce((acc, key) => {
+      acc[key] = sanitizeResultForDisplay(value[key], key)
+      return acc
+    }, {})
+  }
+  if (typeof value === 'string') {
+    const normalizedKey = String(parentKey || '').toLowerCase()
+    if (normalizedKey.includes('url') || normalizedKey.includes('endpoint')) {
+      return '（地址已隐藏）'
+    }
+    if (/^https?:\/\//i.test(value)) {
+      return '（地址已隐藏）'
+    }
+  }
+  return value
 }
 
 function formatApiResult(result) {
-  return JSON.stringify(result, null, 2)
+  return JSON.stringify(sanitizeResultForDisplay(result), null, 2)
 }
 
 function fillCreateExample() {
@@ -1960,7 +2195,7 @@ function fillCreateExample() {
   createForm.express_fee = 0
   createForm.stock = 5
 
-  createForm.publish_shop.user_name = 'tb_demo_shop'
+  createForm.publish_shop.user_name = defaultShopUserName.value || 'tb_demo_shop'
   createForm.publish_shop.province = 330000
   createForm.publish_shop.city = 330100
   createForm.publish_shop.district = 330106
@@ -1981,6 +2216,7 @@ function fillCreateExample() {
 
 function resetCreateForm() {
   Object.assign(createForm, getDefaultCreateForm())
+  applyDefaultShopUserNames()
   createAdvancedEnabled.value = false
   createAdvancedJson.value = '{}'
   createOptionalPanels.value = []
@@ -1990,6 +2226,7 @@ function resetCreateForm() {
 
 function resetPublishForm() {
   Object.assign(publishForm, getDefaultPublishForm())
+  applyDefaultShopUserNames()
   publishAdvancedEnabled.value = false
   publishAdvancedJson.value = '{}'
   publishOptionalPanels.value = []
@@ -1998,8 +2235,10 @@ function resetPublishForm() {
 }
 
 async function createProduct() {
+  applyDefaultShopUserNames()
+
   if (!configReady.value) {
-    ElMessage.warning('请先完成 API 配置')
+    ElMessage.warning('请先完成账号授权配置')
     return
   }
 
@@ -2039,8 +2278,10 @@ async function createProduct() {
 }
 
 async function publishProduct() {
+  applyDefaultShopUserNames()
+
   if (!configReady.value) {
-    ElMessage.warning('请先完成 API 配置')
+    ElMessage.warning('请先完成账号授权配置')
     return
   }
 
