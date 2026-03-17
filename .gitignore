@@ -44,6 +44,9 @@ tmp/
 temp/
 *.tmp
 
+# Runtime data
+data/*.jsonl
+
 # Environment
 .env
 .env.local
