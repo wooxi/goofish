@@ -17,7 +17,12 @@
           :backend-status="store.backendStatus.value"
           :last-query-time="store.lastQueryTime.value"
           :refreshing="store.headerRefreshing.value"
+          :running-task-count="store.runningTaskCount.value"
+          :task-records="store.localTaskRecords.value"
+          :callback-records="store.callbackRecords.value"
+          :task-loading="store.callbackLoading.value || store.localTaskLoading.value"
           @refresh="store.handleHeaderRefresh"
+          @refresh-task-center="store.loadProcessingResults"
         />
 
         <transition name="page-fade" mode="out-in">
@@ -46,7 +51,7 @@ const route = useRoute()
 const router = useRouter()
 
 function syncMenuByRoute() {
-  const menuKey = route.meta?.menuKey || route.name || 'config'
+  const menuKey = route.meta?.menuKey || route.name || 'shopManagement'
   store.handleMenuSelect(String(menuKey))
 }
 

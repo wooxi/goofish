@@ -64,28 +64,22 @@ export function useGoofishWorkspace() {
   ]
 
   const MENU_META = {
-    config: { title: '店铺授权设置', desc: '保存 AppKey、AppSecret 等授权信息，后续页面会自动复用。' },
-    shops: { title: '已绑定店铺', desc: '查看当前授权下可用店铺，并自动选择默认店铺。' },
-    products: { title: '商品管理', desc: '查看商品列表、库存、价格和状态，并支持勾选批量上架、下架、删除。' },
-    orders: { title: '订单查询', desc: '查看订单金额、状态、买卖双方和下单时间。' },
-    templates: { title: '模板中心', desc: '沉淀常用模板，快速复用创建信息。' },
-    create: { title: '发布新商品', desc: '按步骤填写商品信息，提交前可先完成自检。' },
-    callback: { title: '处理结果', desc: '查看最近任务进度、结果与失败原因。' },
+    shopManagement: { title: '店铺管理', desc: '统一管理绑定店铺与授权配置，保存后全局自动复用。' },
+    productLibrary: { title: '商品库', desc: '统一查看商品与模板，并在右侧抽屉发布新商品。' },
+    orders: { title: '订单管理', desc: '查看订单金额、状态、买卖双方和下单时间。' },
   }
 
-  const activeMenu = ref('config')
+  const activeMenu = ref('shopManagement')
   const viewportWidth = ref(window.innerWidth)
   const isCompactViewport = computed(() => viewportWidth.value <= 960)
   const headerRefreshing = ref(false)
+  const shopManagementTab = ref('shops')
+  const productLibraryTab = ref('products')
 
   const menuItems = [
-    { key: 'config', icon: '⚙️', label: '授权设置' },
-    { key: 'shops', icon: '🏪', label: '绑定店铺' },
-    { key: 'products', icon: '📦', label: '商品管理' },
-    { key: 'orders', icon: '🧾', label: '订单查询' },
-    { key: 'templates', icon: '🧩', label: '模板中心' },
-    { key: 'create', icon: '➕', label: '发布新商品' },
-    { key: 'callback', icon: '📨', label: '处理结果' },
+    { key: 'shopManagement', icon: '🏪', label: '店铺管理' },
+    { key: 'productLibrary', icon: '📦', label: '商品库' },
+    { key: 'orders', icon: '🧾', label: '订单管理' },
   ]
 
   const currentMenuTitle = computed(() => MENU_META[activeMenu.value]?.title || 'Goofish')
@@ -97,52 +91,49 @@ export function useGoofishWorkspace() {
 
   function handleMenuSelect(index) {
     activeMenu.value = index
-    if (index === 'callback') {
-      loadProcessingResults(true)
+
+    if (index === 'shopManagement') {
+      if (shopManagementTab.value === 'shops') {
+        queryShops(true, true)
+      }
+      return
     }
 
-    if (['create'].includes(index)) {
+    if (index === 'productLibrary') {
       ensureBoundShopsReady()
+      if (productLibraryTab.value === 'templates') {
+        loadTemplates(true)
+      }
+      return
     }
   }
 
   async function handleHeaderRefresh() {
     headerRefreshing.value = true
     try {
-      if (activeMenu.value === 'config') {
+      if (activeMenu.value === 'shopManagement') {
         await loadConfig()
-        ElMessage.success('授权配置已刷新')
+        if (shopManagementTab.value === 'shops' && configReady.value) {
+          await queryShops(true)
+        } else {
+          ElMessage.success('授权配置已刷新')
+        }
         return
       }
 
-      if (activeMenu.value === 'shops') {
-        await queryShops(true)
-        return
-      }
-
-      if (activeMenu.value === 'products') {
-        await queryProducts(true, { page_no: 1, page_size: productQuery.page_size })
+      if (activeMenu.value === 'productLibrary') {
+        if (productLibraryTab.value === 'templates') {
+          await loadTemplates()
+        } else {
+          await queryProducts(true, { page_no: 1, page_size: productQuery.page_size })
+        }
+        await loadProcessingResults(true)
         return
       }
 
       if (activeMenu.value === 'orders') {
         await queryOrders(true, { page_no: 1, page_size: orderQuery.page_size })
         return
-      }
-
-      if (activeMenu.value === 'templates') {
-        await loadTemplates()
-        return
-      }
-
-      if (activeMenu.value === 'create') {
-        await ensureBoundShopsReady()
-        ElMessage.success('发布页依赖数据已校准')
-        return
-      }
-
-      if (activeMenu.value === 'callback') {
-        await loadProcessingResults()
       }
     } finally {
       headerRefreshing.value = false
@@ -273,7 +264,7 @@ export function useGoofishWorkspace() {
         ? `已为你优先选择「${best.shop_name}（${best.user_name}）」作为默认店铺，可随时切换。`
         : `已为你自动选择默认店铺账号：${best?.user_name || '-'}`
     }
-    return '暂未获取到已绑定店铺。请先到“已绑定店铺”页获取，或先手动填写店铺账号。'
+    return '暂未获取到已绑定店铺。请先到「店铺管理 > 绑定的店铺」查询，或先手动填写店铺账号。'
   })
 
   function applyDefaultShopUserNames(force = false) {
@@ -502,6 +493,39 @@ export function useGoofishWorkspace() {
   const localTaskRecords = ref([])
   const localTaskLoading = ref(false)
   const localTaskError = ref('')
+
+  const DEMO_TEXT_RE = /(^|[\s_.-])(demo|mock|test)([\s_.-]|$)|演示|示例|测试/i
+
+  function hasDemoMarker(...parts) {
+    return parts.some((part) => DEMO_TEXT_RE.test(String(part ?? '').trim()))
+  }
+
+  function isDemoLocalTaskRecord(record) {
+    if (!record || typeof record !== 'object') return false
+    return hasDemoMarker(
+      record.task_id,
+      record.task_type,
+      record.task_type_text,
+      record.operator_user_name,
+      record.message,
+    )
+  }
+
+  function isDemoCallbackRecord(record) {
+    if (!record || typeof record !== 'object') return false
+    return hasDemoMarker(
+      record.task_id,
+      record.task_type,
+      record.task_result,
+      record.user_name,
+      record.err_msg,
+      record.product_id,
+    )
+  }
+
+  const runningTaskCount = computed(() => {
+    return localTaskRecords.value.filter((task) => ['queued', 'running'].includes(String(task?.status || ''))).length
+  })
   let callbackTimer = null
 
   onMounted(async () => {
@@ -963,8 +987,8 @@ export function useGoofishWorkspace() {
 
     if (!(batchPublishForm.user_name || '').trim()) {
       const tip = hasBoundShops.value
-        ? '暂未选中店铺账号，请先到“已绑定店铺”页查询或手动填写后再试'
-        : '暂未获取到店铺，请先到“已绑定店铺”页查询后再提交'
+        ? '暂未选中店铺账号，请先到「店铺管理 > 绑定的店铺」查询或手动填写后再试'
+        : '暂未获取到店铺，请先到「店铺管理 > 绑定的店铺」查询后再提交'
       ElMessage.warning(tip)
       return
     }
@@ -984,7 +1008,7 @@ export function useGoofishWorkspace() {
       if (data.success) {
         const total = Number(data?.summary?.total) || selectedProductIds.value.length
         const taskId = data.task_id ? `任务号：${data.task_id}；` : ''
-        inlineTaskNotice.value = `已创建批量上架任务（共 ${total} 件）。${taskId}系统正在后台逐个提交，可前往“处理结果”查看任务进度。`
+        inlineTaskNotice.value = `已创建批量上架任务（共 ${total} 件）。${taskId}系统正在后台逐个提交，可前往右上角「任务中心」查看任务进度。`
         ElMessage.success(data.message || '批量上架任务已创建，正在后台处理')
         loadProcessingResults(true)
       } else {
@@ -1012,8 +1036,8 @@ export function useGoofishWorkspace() {
 
     if (!(batchPublishForm.user_name || '').trim()) {
       const tip = hasBoundShops.value
-        ? '暂未选中店铺账号，请先到“已绑定店铺”页查询或手动填写后再试'
-        : '暂未获取到店铺，请先到“已绑定店铺”页查询后再提交'
+        ? '暂未选中店铺账号，请先到「店铺管理 > 绑定的店铺」查询或手动填写后再试'
+        : '暂未获取到店铺，请先到「店铺管理 > 绑定的店铺」查询后再提交'
       ElMessage.warning(tip)
       return
     }
@@ -1033,7 +1057,7 @@ export function useGoofishWorkspace() {
       if (data.success) {
         const total = Number(data?.summary?.total) || selectedProductIds.value.length
         const taskId = data.task_id ? `任务号：${data.task_id}；` : ''
-        inlineTaskNotice.value = `已创建批量下架任务（共 ${total} 件）。${taskId}系统正在后台逐个提交，可前往“处理结果”查看任务进度。`
+        inlineTaskNotice.value = `已创建批量下架任务（共 ${total} 件）。${taskId}系统正在后台逐个提交，可前往右上角「任务中心」查看任务进度。`
         ElMessage.success(data.message || '批量下架任务已创建，正在后台处理')
         loadProcessingResults(true)
       } else {
@@ -1061,8 +1085,8 @@ export function useGoofishWorkspace() {
 
     if (!(batchPublishForm.user_name || '').trim()) {
       const tip = hasBoundShops.value
-        ? '暂未选中店铺账号，请先到“已绑定店铺”页查询或手动填写后再试'
-        : '暂未获取到店铺，请先到“已绑定店铺”页查询后再提交'
+        ? '暂未选中店铺账号，请先到「店铺管理 > 绑定的店铺」查询或手动填写后再试'
+        : '暂未获取到店铺，请先到「店铺管理 > 绑定的店铺」查询后再提交'
       ElMessage.warning(tip)
       return
     }
@@ -1082,7 +1106,7 @@ export function useGoofishWorkspace() {
       if (data.success) {
         const total = Number(data?.summary?.total) || selectedProductIds.value.length
         const taskId = data.task_id ? `任务号：${data.task_id}；` : ''
-        inlineTaskNotice.value = `已创建批量删除任务（共 ${total} 件）。${taskId}系统正在后台逐个处理，可前往“处理结果”查看任务进度。`
+        inlineTaskNotice.value = `已创建批量删除任务（共 ${total} 件）。${taskId}系统正在后台逐个处理，可前往右上角「任务中心」查看任务进度。`
         ElMessage.success(data.message || '批量删除任务已创建，正在后台处理')
         loadProcessingResults(true)
       } else {
@@ -1096,7 +1120,7 @@ export function useGoofishWorkspace() {
   }
 
   function goToCallbackRecords() {
-    activeMenu.value = 'callback'
+    activeMenu.value = 'productLibrary'
     loadProcessingResults(true)
   }
 
@@ -1277,7 +1301,8 @@ export function useGoofishWorkspace() {
     try {
       applyTemplateData(template.template_data || {})
       applyDefaultShopUserNames()
-      activeMenu.value = 'create'
+      productLibraryTab.value = 'templates'
+      activeMenu.value = 'productLibrary'
       ElMessage.success(`已应用模板：${template.name}`)
     } catch (e) {
       ElMessage.error(e.message || '模板应用失败')
@@ -1597,7 +1622,7 @@ export function useGoofishWorkspace() {
     if (!shop.user_name) {
       return hasBoundShops.value
         ? '请先选择发布店铺账号'
-        : '暂未获取到店铺，请先到“已绑定店铺”页查询后再提交'
+        : '暂未获取到店铺，请先到「店铺管理 > 绑定的店铺」查询后再提交'
     }
     if (!isInteger(shop.province)) return '请填写发货省份代码（平台地区码）'
     if (!isInteger(shop.city)) return '请填写发货城市代码（平台地区码）'
@@ -1675,23 +1700,20 @@ export function useGoofishWorkspace() {
     createForm.express_fee = 0
     createForm.stock = 5
 
-    createForm.publish_shop.user_name = defaultShopUserName.value || 'tb_demo_shop'
+    createForm.publish_shop.user_name = defaultShopUserName.value || ''
     createForm.publish_shop.province = 330000
     createForm.publish_shop.city = 330100
     createForm.publish_shop.district = 330106
-    createForm.publish_shop.title = '九成新演示商品（请先改成你的真实信息）'
-    createForm.publish_shop.content = '演示填充：功能联调用文案，提交前请替换为真实商品描述。'
-    createForm.publish_shop.images_text = [
-      'https://via.placeholder.com/1200x1200.png?text=goofish-demo-1',
-      'https://via.placeholder.com/1200x1200.png?text=goofish-demo-2',
-    ].join('\n')
+    createForm.publish_shop.title = ''
+    createForm.publish_shop.content = ''
+    createForm.publish_shop.images_text = ''
 
     createAdvancedEnabled.value = false
     createAdvancedJson.value = '{}'
     createOptionalPanels.value = []
     createProductError.value = ''
     createProductResult.value = ''
-    ElMessage.success('已填入示例内容（未提交）')
+    ElMessage.success('已填入基础模板，请填写真实商品信息后再提交')
   }
 
   function resetCreateForm() {
@@ -1775,7 +1797,7 @@ export function useGoofishWorkspace() {
       const res = await fetch(`${API_BASE}/api/products/task/records?limit=50`)
       const data = await res.json()
       if (data.success && Array.isArray(data.data)) {
-        localTaskRecords.value = data.data
+        localTaskRecords.value = data.data.filter((record) => !isDemoLocalTaskRecord(record))
       } else {
         localTaskError.value = data.detail || '任务记录读取失败'
         if (!silent) ElMessage.error(localTaskError.value)
@@ -1795,7 +1817,7 @@ export function useGoofishWorkspace() {
       const res = await fetch(`${API_BASE}/api/products/callback/records?limit=50`)
       const data = await res.json()
       if (data.success && Array.isArray(data.data)) {
-        callbackRecords.value = data.data
+        callbackRecords.value = data.data.filter((record) => !isDemoCallbackRecord(record))
       } else {
         callbackError.value = data.detail || '处理记录读取失败'
         if (!silent) ElMessage.error(callbackError.value)
@@ -1822,6 +1844,8 @@ export function useGoofishWorkspace() {
     CREATE_CONSTRAINT_TIPS,
     MENU_META,
     activeMenu,
+    shopManagementTab,
+    productLibraryTab,
     isCompactViewport,
     headerRefreshing,
     menuItems,
@@ -1897,6 +1921,7 @@ export function useGoofishWorkspace() {
     localTaskRecords,
     localTaskLoading,
     localTaskError,
+    runningTaskCount,
     productDetailDialogVisible,
     productDetailLoading,
     productDetailError,

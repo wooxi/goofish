@@ -46,6 +46,7 @@ temp/
 
 # Runtime data
 data/*.jsonl
+data/*.json
 
 # Environment
 .env

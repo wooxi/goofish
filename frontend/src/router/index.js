@@ -3,25 +3,19 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    redirect: { name: 'config' },
+    redirect: { name: 'shopManagement' },
   },
   {
-    path: '/config',
-    name: 'config',
-    meta: { menuKey: 'config' },
-    component: () => import('../pages/ConfigPage.vue'),
+    path: '/shop-management',
+    name: 'shopManagement',
+    meta: { menuKey: 'shopManagement' },
+    component: () => import('../pages/StoreManagementPage.vue'),
   },
   {
-    path: '/shops',
-    name: 'shops',
-    meta: { menuKey: 'shops' },
-    component: () => import('../pages/ShopsPage.vue'),
-  },
-  {
-    path: '/products',
-    name: 'products',
-    meta: { menuKey: 'products' },
-    component: () => import('../pages/ProductsPage.vue'),
+    path: '/product-library',
+    name: 'productLibrary',
+    meta: { menuKey: 'productLibrary' },
+    component: () => import('../pages/ProductLibraryPage.vue'),
   },
   {
     path: '/orders',
@@ -29,24 +23,13 @@ const routes = [
     meta: { menuKey: 'orders' },
     component: () => import('../pages/OrdersPage.vue'),
   },
-  {
-    path: '/templates',
-    name: 'templates',
-    meta: { menuKey: 'templates' },
-    component: () => import('../pages/TemplatesPage.vue'),
-  },
-  {
-    path: '/create',
-    name: 'create',
-    meta: { menuKey: 'create' },
-    component: () => import('../pages/CreateProductPage.vue'),
-  },
-  {
-    path: '/callback',
-    name: 'callback',
-    meta: { menuKey: 'callback' },
-    component: () => import('../pages/CallbackPage.vue'),
-  },
+  // 兼容旧路由，统一收敛到新 IA
+  { path: '/config', redirect: { name: 'shopManagement' } },
+  { path: '/shops', redirect: { name: 'shopManagement' } },
+  { path: '/products', redirect: { name: 'productLibrary' } },
+  { path: '/templates', redirect: { name: 'productLibrary' } },
+  { path: '/create', redirect: { name: 'productLibrary' } },
+  { path: '/callback', redirect: { name: 'productLibrary' } },
 ]
 
 const router = createRouter({
