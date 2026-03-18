@@ -553,6 +553,29 @@ const store = inject('goofishWorkspace')
 const createDrawerVisible = ref(false)
 const publishMode = ref('single')
 const drawerSize = computed(() => (store.isCompactViewport.value ? '96vw' : '78vw'))
+
+const singleSubmitFeedback = computed(() => {
+  const errorText = String(store.createProductError?.value || '').trim()
+  if (errorText) {
+    return {
+      type: 'warning',
+      title: '发布失败',
+      desc: errorText,
+    }
+  }
+
+  const resultText = String(store.createProductResult?.value || '').trim()
+  if (resultText) {
+    return {
+      type: 'success',
+      title: '发布请求已提交',
+      desc: '创建结果已返回，可在商品列表或任务中心继续查看。',
+    }
+  }
+
+  return null
+})
+
 const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:8001'
   : `http://${window.location.hostname}:8001`
