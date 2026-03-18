@@ -1,200 +1,187 @@
-# Goofish 部署手册（单机）
+# Goofish 部署说明
 
-本文面向 `/root/goofish` 项目目录，默认 Linux（systemd 环境）。
+本文覆盖两种部署方式：
+1) Docker Compose（推荐）
+2) 非 Docker（Nginx + systemd）
 
-## 1. 部署前准备
+---
+
+## 1. 前置要求
+
+- Linux x86_64
+- Git
+- Docker + Docker Compose（方案一）
+- 或 Python3 + Node.js + Nginx（方案二）
+
+---
+
+## 2. 方案一：Docker Compose（推荐）
+
+### 2.1 初始化
 
 ```bash
-# 1) 拉取代码
-cd /root
-git clone <你的仓库地址> goofish
-cd /root/goofish
+git clone <your-repo-url> goofish
+cd goofish
+cp .env.example .env
+```
 
-# 2) 安装系统依赖
+### 2.2 启动
+
+```bash
+docker compose up -d --build
+```
+
+### 2.3 验证
+
+```bash
+# 容器状态
+docker compose ps
+
+# 前端首页（默认 8080）
+curl -I http://127.0.0.1:${FRONTEND_PORT:-8080}
+
+# 后端健康检查（经前端 Nginx 反代）
+curl -sS http://127.0.0.1:${FRONTEND_PORT:-8080}/health
+```
+
+### 2.4 停止与清理
+
+```bash
+docker compose down
+# 如需清理镜像缓存
+# docker compose down --rmi local
+```
+
+---
+
+## 3. 方案二：非 Docker（Nginx + systemd）
+
+### 3.1 安装依赖
+
+```bash
 sudo apt-get update
-sudo apt-get install -y python3 python3-venv python3-pip nodejs npm curl
+sudo apt-get install -y python3 python3-venv python3-pip nodejs npm nginx
+```
 
-# 3) 安装后端依赖（建议 venv）
+### 3.2 后端准备
+
+```bash
+cd /opt/goofish
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install fastapi uvicorn httpx pydantic
-
-# 4) 安装前端依赖
-cd /root/goofish/frontend
-npm install
+pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env
 ```
 
-## 2. 启动方式
-
-### 2.1 直接后台启动（简单可用）
+### 3.3 前端构建
 
 ```bash
-cd /root/goofish
-bash start.sh
+cd /opt/goofish
+cp frontend/.env.example frontend/.env
+cd frontend
+npm ci
+npm run build
 ```
 
-`start.sh` 会：
-- 清理旧进程
-- 启动后端（8001）
-- 启动前端（8002）
-- 输出日志位置与访问地址
+### 3.4 Nginx 配置（宿主机）
 
-### 2.2 分开启动（便于排障）
+参考 `/etc/nginx/sites-available/goofish.conf`：
+
+```nginx
+server {
+  listen 80;
+  server_name _;
+
+  root /opt/goofish/frontend/dist;
+  index index.html;
+
+  location /api/ {
+    proxy_pass http://127.0.0.1:8001/api/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location = /health {
+    proxy_pass http://127.0.0.1:8001/health;
+  }
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+```
+
+启用配置：
 
 ```bash
-# 后端
-cd /root/goofish
-nohup python3 backend/main.py > logs/backend.log 2>&1 &
-
-# 前端开发服务
-cd /root/goofish/frontend
-nohup npm run dev > /root/goofish/logs/frontend.log 2>&1 &
+sudo ln -s /etc/nginx/sites-available/goofish.conf /etc/nginx/sites-enabled/goofish.conf
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-## 3. 健康检查
+### 3.5 后端 systemd（示例）
 
-```bash
-# 后端健康检查
-curl -sS http://127.0.0.1:8001/health
-
-# 前端可达性
-curl -I http://127.0.0.1:8002/
-
-# 端口监听
-ss -lntp | grep -E '8001|8002'
-```
-
-## 4. systemd（可选，推荐）
-
-> 若你希望机器重启后自动拉起服务，建议使用 systemd。
-
-### 4.1 backend.service
-
-文件：`/etc/systemd/system/goofish-backend.service`
+`/etc/systemd/system/goofish-backend.service`
 
 ```ini
 [Unit]
-Description=Goofish Backend (FastAPI)
+Description=Goofish Backend
 After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/goofish
-Environment=BACKEND_PORT=8001
-ExecStart=/usr/bin/python3 /root/goofish/backend/main.py
+User=www-data
+WorkingDirectory=/opt/goofish
+EnvironmentFile=/opt/goofish/backend/.env
+ExecStart=/opt/goofish/.venv/bin/python /opt/goofish/backend/main.py
 Restart=always
 RestartSec=3
-StandardOutput=append:/root/goofish/logs/backend.log
-StandardError=append:/root/goofish/logs/backend.log
+StandardOutput=append:/opt/goofish/logs/backend.log
+StandardError=append:/opt/goofish/logs/backend.log
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-### 4.2 frontend.service
-
-文件：`/etc/systemd/system/goofish-frontend.service`
-
-```ini
-[Unit]
-Description=Goofish Frontend (Vite Dev Server)
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/root/goofish/frontend
-Environment=FRONTEND_PORT=8002
-ExecStart=/usr/bin/npm run dev
-Restart=always
-RestartSec=3
-StandardOutput=append:/root/goofish/logs/frontend.log
-StandardError=append:/root/goofish/logs/frontend.log
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### 4.3 启用与管理
+生效：
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now goofish-backend
-sudo systemctl enable --now goofish-frontend
-
 sudo systemctl status goofish-backend --no-pager
-sudo systemctl status goofish-frontend --no-pager
-
-# 重启
-sudo systemctl restart goofish-backend goofish-frontend
 ```
 
-## 5. 更新发布流程（Release）
+---
+
+## 4. 开发辅助脚本
+
+部署脚本已集中到 `deploy/`：
+
+- `deploy/start.sh`：本地开发启动（后端 + 前端 dev server）
+- `deploy/watchdog.sh`：健康检查守护
+- 根目录 `start.sh` / `watchdog.sh` 为兼容入口（转发到 deploy）
+
+语法检查：
 
 ```bash
-cd /root/goofish
-
-# 1) 拉取最新代码
-git fetch origin
-git checkout master
-git pull --ff-only origin master
-
-# 2) 前端构建校验
-cd /root/goofish/frontend
-npm install
-npm run build
-
-# 3) 后端语法校验
-python3 -m py_compile /root/goofish/backend/main.py
-
-# 4) 重启服务（按你的运行方式二选一）
-# 方式A：systemd
-sudo systemctl restart goofish-backend goofish-frontend
-
-# 方式B：脚本
-cd /root/goofish
-bash start.sh
-
-# 5) 健康检查
-curl -sS http://127.0.0.1:8001/health
-curl -I http://127.0.0.1:8002/
+bash -n deploy/start.sh deploy/watchdog.sh start.sh watchdog.sh
 ```
 
-## 6. 回滚方式
+---
 
-```bash
-cd /root/goofish
+## 5. 常见问题
 
-# 1) 查看历史 commit
-git log --oneline -n 20
+### Q1: 前端白屏或路由 404
+- 确认 Nginx 使用 `try_files ... /index.html`
+- 清浏览器缓存并重试
 
-# 2) 回滚到指定版本（示例）
-git reset --hard <commit_hash>
+### Q2: `/api` 报错
+- 检查后端是否存活：`curl http://127.0.0.1:8001/health`
+- 检查 Nginx `proxy_pass` 是否正确
 
-# 3) 重启服务
-sudo systemctl restart goofish-backend goofish-frontend
-# 或 bash start.sh
-
-# 4) 回滚后验证
-curl -sS http://127.0.0.1:8001/health
-curl -I http://127.0.0.1:8002/
-```
-
-## 7. 日志与故障排查
-
-```bash
-# 应用日志
-tail -f /root/goofish/logs/backend.log
-tail -f /root/goofish/logs/frontend.log
-
-# systemd 日志（若使用 systemd）
-sudo journalctl -u goofish-backend -f
-sudo journalctl -u goofish-frontend -f
-```
-
-常见故障：
-- 8001/8002 被占用：先用 `ss -lntp | grep 8001` 定位冲突进程
-- 前端白屏：先 `npm run build`，再强制刷新浏览器缓存
-- 接口报 400：检查是否已在页面保存 AppKey/AppSecret
+### Q3: 跨域报错
+- 调整 `backend/.env` 中 `CORS_ALLOW_ORIGINS`
+- 重启后端服务
