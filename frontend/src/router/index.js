@@ -45,7 +45,7 @@ function clearChunkRetry(routeKey) {
   }
 }
 
-function withChunkRetry(routeKey, loader) {
+function withChunkRetry(routeKey, routePath, loader) {
   return () => loader()
     .then((module) => {
       clearChunkRetry(routeKey)
@@ -58,7 +58,8 @@ function withChunkRetry(routeKey, loader) {
 
       if (!hasRecentChunkRetry(routeKey)) {
         markChunkRetry(routeKey)
-        window.location.reload()
+        const fallbackPath = typeof routePath === 'string' && routePath ? routePath : window.location.pathname
+        window.location.assign(fallbackPath)
         return new Promise(() => {})
       }
 
@@ -75,19 +76,19 @@ const routes = [
     path: '/shop-management',
     name: 'shopManagement',
     meta: { menuKey: 'shopManagement' },
-    component: withChunkRetry('shopManagement', () => import('../pages/StoreManagementPage.vue')),
+    component: withChunkRetry('shopManagement', '/shop-management', () => import('../pages/StoreManagementPage.vue')),
   },
   {
     path: '/product-library',
     name: 'productLibrary',
     meta: { menuKey: 'productLibrary' },
-    component: withChunkRetry('productLibrary', () => import('../pages/ProductLibraryPage.vue')),
+    component: withChunkRetry('productLibrary', '/product-library', () => import('../pages/ProductLibraryPage.vue')),
   },
   {
     path: '/orders',
     name: 'orders',
     meta: { menuKey: 'orders' },
-    component: withChunkRetry('orders', () => import('../pages/OrdersPage.vue')),
+    component: withChunkRetry('orders', '/orders', () => import('../pages/OrdersPage.vue')),
   },
   // 兼容旧路由，统一收敛到新 IA
   { path: '/config', redirect: { name: 'shopManagement' } },
