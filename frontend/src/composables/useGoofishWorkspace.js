@@ -17,6 +17,7 @@ export function useGoofishWorkspace() {
   const SHOP_QUERY_CACHE_KEY = 'goofish:shops-query-cache:v1'
   const PRODUCT_QUERY_CACHE_KEY = 'goofish:products-query-cache:v1'
   const ORDER_QUERY_CACHE_KEY = 'goofish:orders-query-cache:v1'
+  const EXAMPLE_TEMPLATE_ID_KEY = 'goofish:example-template-id:v1'
   const INTERNAL_CALLBACK_PATH = '/api/products/callback/receive'
   const PRODUCT_PAGE_SIZE_OPTIONS = [10, 30, 50]
   const PRODUCT_SORT_FIELD_OPTIONS = [
@@ -42,19 +43,40 @@ export function useGoofishWorkspace() {
     { value: 'asc', label: '正序（从低到高）' },
   ]
   const ITEM_BIZ_TYPE_OPTIONS = [
-    { value: 2, label: '普通商品' },
-    { value: 0, label: '已验货商品' },
-    { value: 10, label: '验货宝商品' },
-    { value: 16, label: '品牌授权商品' },
-    { value: 19, label: '闲鱼严选商品' },
-    { value: 24, label: '闲鱼特卖商品' },
-    { value: 26, label: '品牌捡漏商品' },
-    { value: 35, label: '跨境商品' },
+    { value: 2, label: '普通商品（2）' },
+    { value: 0, label: '已验货（0）' },
+    { value: 10, label: '验货宝（10）' },
+    { value: 16, label: '品牌授权（16）' },
+    { value: 19, label: '闲鱼严选（19）' },
+    { value: 24, label: '闲鱼特卖（24）' },
+    { value: 26, label: '品牌捡漏（26）' },
+    { value: 35, label: '跨境商品（35）' },
   ]
 
   const SP_BIZ_TYPE_OPTIONS = [
-    1, 2, 3, 8, 9, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 33, 99,
-  ].map((value) => ({ value, label: `类目 ${value}` }))
+    { value: 1, label: '手机（1）' },
+    { value: 2, label: '潮品（2）' },
+    { value: 3, label: '家电（3）' },
+    { value: 8, label: '乐器（8）' },
+    { value: 9, label: '3C数码（9）' },
+    { value: 16, label: '奢品（16）' },
+    { value: 17, label: '母婴（17）' },
+    { value: 18, label: '美妆个护（18）' },
+    { value: 19, label: '文玩/珠宝（19）' },
+    { value: 20, label: '游戏电玩（20）' },
+    { value: 21, label: '家居（21）' },
+    { value: 22, label: '虚拟游戏（22）' },
+    { value: 23, label: '租号（23）' },
+    { value: 24, label: '图书（24）' },
+    { value: 25, label: '卡券（25）' },
+    { value: 27, label: '食品（27）' },
+    { value: 28, label: '潮玩（28）' },
+    { value: 29, label: '二手车（29）' },
+    { value: 30, label: '宠植（30）' },
+    { value: 31, label: '工艺礼品（31）' },
+    { value: 33, label: '汽车服务（33）' },
+    { value: 99, label: '其他（99）' },
+  ]
 
   const CREATE_CONSTRAINT_TIPS = [
     '售价、运费、库存请填写整数。',
@@ -365,10 +387,38 @@ export function useGoofishWorkspace() {
   const templatesLoading = ref(false)
   const templatesError = ref('')
   const savingTemplate = ref(false)
+  const updatingTemplate = ref(false)
+  const exampleTemplateId = ref('')
+  const exampleTemplate = computed(() => {
+    const targetId = String(exampleTemplateId.value || '').trim()
+    if (!targetId) return null
+    return templates.value.find((item) => String(item?.template_id || '').trim() === targetId) || null
+  })
   const templateDraft = reactive({
     name: '',
     description: '',
   })
+
+  function readExampleTemplateIdFromLocal() {
+    try {
+      return String(localStorage.getItem(EXAMPLE_TEMPLATE_ID_KEY) || '').trim()
+    } catch {
+      return ''
+    }
+  }
+
+  function persistExampleTemplateId(templateId) {
+    const normalized = String(templateId || '').trim()
+    try {
+      if (normalized) {
+        localStorage.setItem(EXAMPLE_TEMPLATE_ID_KEY, normalized)
+      } else {
+        localStorage.removeItem(EXAMPLE_TEMPLATE_ID_KEY)
+      }
+    } catch (e) {
+      console.warn('示例模板配置写入失败：', e)
+    }
+  }
 
   // 订单状态
   const queryingOrders = ref(false)
@@ -493,6 +543,23 @@ export function useGoofishWorkspace() {
   const localTaskRecords = ref([])
   const localTaskLoading = ref(false)
   const localTaskError = ref('')
+
+  function buildTaskCenterError(segmentLabel, detail) {
+    const base = `任务中心加载失败（${segmentLabel}）`
+    const message = String(detail || '').trim()
+    if (!message) return base
+    if (message.startsWith(base)) return message
+    return `${base}：${message}`
+  }
+
+  const taskCenterError = computed(() => {
+    const errors = [localTaskError.value, callbackError.value]
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+
+    if (!errors.length) return ''
+    return Array.from(new Set(errors)).join('；')
+  })
 
   const DEMO_TEXT_RE = /(^|[\s_.-])(demo|mock|test)([\s_.-]|$)|演示|示例|测试/i
 
@@ -1010,7 +1077,7 @@ export function useGoofishWorkspace() {
         const taskId = data.task_id ? `任务号：${data.task_id}；` : ''
         inlineTaskNotice.value = `已创建批量上架任务（共 ${total} 件）。${taskId}系统正在后台逐个提交，可前往右上角「任务中心」查看任务进度。`
         ElMessage.success(data.message || '批量上架任务已创建，正在后台处理')
-        loadProcessingResults(true)
+        await loadProcessingResults(true)
       } else {
         ElMessage.error(data.detail || '批量上架任务创建失败')
       }
@@ -1059,7 +1126,7 @@ export function useGoofishWorkspace() {
         const taskId = data.task_id ? `任务号：${data.task_id}；` : ''
         inlineTaskNotice.value = `已创建批量下架任务（共 ${total} 件）。${taskId}系统正在后台逐个提交，可前往右上角「任务中心」查看任务进度。`
         ElMessage.success(data.message || '批量下架任务已创建，正在后台处理')
-        loadProcessingResults(true)
+        await loadProcessingResults(true)
       } else {
         ElMessage.error(data.detail || '批量下架任务创建失败')
       }
@@ -1108,7 +1175,7 @@ export function useGoofishWorkspace() {
         const taskId = data.task_id ? `任务号：${data.task_id}；` : ''
         inlineTaskNotice.value = `已创建批量删除任务（共 ${total} 件）。${taskId}系统正在后台逐个处理，可前往右上角「任务中心」查看任务进度。`
         ElMessage.success(data.message || '批量删除任务已创建，正在后台处理')
-        loadProcessingResults(true)
+        await loadProcessingResults(true)
       } else {
         ElMessage.error(data.detail || '批量删除任务创建失败')
       }
@@ -1191,6 +1258,14 @@ export function useGoofishWorkspace() {
       const data = await res.json()
       if (data.success && Array.isArray(data.data)) {
         templates.value = data.data
+
+        const backendExampleId = String(data.example_template_id || '').trim()
+        const localExampleId = readExampleTemplateIdFromLocal()
+        const resolvedExampleId = backendExampleId || localExampleId
+        const exists = templates.value.some((item) => String(item?.template_id || '').trim() === resolvedExampleId)
+
+        exampleTemplateId.value = exists ? resolvedExampleId : ''
+        persistExampleTemplateId(exampleTemplateId.value)
       } else {
         templatesError.value = data.detail || '模板读取失败'
         if (!silent) ElMessage.error(templatesError.value)
@@ -1225,6 +1300,117 @@ export function useGoofishWorkspace() {
       return null
     } finally {
       savingTemplate.value = false
+    }
+  }
+
+  async function updateTemplate(templateId, payload) {
+    const normalizedTemplateId = String(templateId || '').trim()
+    if (!normalizedTemplateId) {
+      ElMessage.error('模板 ID 缺失，无法保存')
+      return null
+    }
+
+    updatingTemplate.value = true
+    templatesError.value = ''
+    try {
+      const updateRes = await fetch(`${API_BASE}/api/templates/${normalizedTemplateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const updateData = await updateRes.json()
+
+      if (updateRes.ok && updateData?.success) {
+        ElMessage.success(updateData.message || '模板保存成功')
+        await loadTemplates(true)
+        return updateData.data
+      }
+
+      // 兼容未提供后端更新接口的场景：前端执行“新建 + 删除旧模板”的最小兜底
+      if (updateRes.status !== 404 && updateRes.status !== 405) {
+        throw new Error(updateData?.detail || '模板保存失败')
+      }
+
+      const createRes = await fetch(`${API_BASE}/api/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const createData = await createRes.json()
+      if (!createRes.ok || !createData?.success || !createData?.data) {
+        throw new Error(createData?.detail || '模板保存失败')
+      }
+
+      const createdTemplate = createData.data
+      const createdTemplateId = String(createdTemplate?.template_id || '').trim()
+
+      try {
+        await fetch(`${API_BASE}/api/templates/${normalizedTemplateId}`, { method: 'DELETE' })
+      } catch (e) {
+        console.warn('旧模板删除失败（已创建新模板）：', e)
+      }
+
+      if (createdTemplateId && exampleTemplateId.value === normalizedTemplateId) {
+        exampleTemplateId.value = createdTemplateId
+        persistExampleTemplateId(createdTemplateId)
+      }
+
+      ElMessage.success('模板保存成功')
+      await loadTemplates(true)
+      return createdTemplate
+    } catch (e) {
+      templatesError.value = e.message || '模板保存失败'
+      ElMessage.error(templatesError.value)
+      return null
+    } finally {
+      updatingTemplate.value = false
+    }
+  }
+
+  async function setTemplateAsExample(template) {
+    const normalizedTemplateId = String(template?.template_id || '').trim()
+    if (!normalizedTemplateId) {
+      ElMessage.error('模板 ID 缺失，无法设置示例')
+      return false
+    }
+
+    updatingTemplate.value = true
+    templatesError.value = ''
+    try {
+      let syncedByBackend = false
+      try {
+        const res = await fetch(`${API_BASE}/api/templates/${normalizedTemplateId}/example`, {
+          method: 'POST',
+        })
+        if (res.ok) {
+          const data = await res.json()
+          syncedByBackend = Boolean(data?.success)
+        }
+      } catch (e) {
+        console.warn('后端示例模板接口调用失败，使用本地兜底：', e)
+      }
+
+      exampleTemplateId.value = normalizedTemplateId
+      persistExampleTemplateId(normalizedTemplateId)
+
+      if (syncedByBackend) {
+        await loadTemplates(true)
+      } else {
+        templates.value = templates.value.map((item) => ({
+          ...item,
+          is_example: String(item?.template_id || '').trim() === normalizedTemplateId,
+        }))
+      }
+
+      const templateName = String(template?.name || '').trim()
+      ElMessage.success(templateName ? `已设「${templateName}」为示例内容` : '示例内容设置成功')
+      return true
+    } catch (e) {
+      templatesError.value = e.message || '示例内容设置失败'
+      ElMessage.error(templatesError.value)
+      return false
+    } finally {
+      updatingTemplate.value = false
     }
   }
 
@@ -1314,6 +1500,12 @@ export function useGoofishWorkspace() {
       const res = await fetch(`${API_BASE}/api/templates/${template.template_id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.success) {
+        const removedId = String(template?.template_id || '').trim()
+        if (removedId && removedId === exampleTemplateId.value) {
+          exampleTemplateId.value = ''
+          persistExampleTemplateId('')
+        }
+
         ElMessage.success(data.message || '模板已删除')
         await loadTemplates(true)
       } else {
@@ -1693,6 +1885,26 @@ export function useGoofishWorkspace() {
   }
 
   function fillCreateExample() {
+    const configuredExample = exampleTemplate.value
+    if (configuredExample && isPlainObject(configuredExample.template_data)) {
+      try {
+        applyTemplateData(configuredExample.template_data)
+        applyDefaultShopUserNames()
+        createAdvancedEnabled.value = false
+        createAdvancedJson.value = '{}'
+        createOptionalPanels.value = []
+        createProductError.value = ''
+        createProductResult.value = ''
+        ElMessage.success(`已填充示例模板：${configuredExample.name || '未命名模板'}`)
+        return {
+          source: 'template',
+          template_id: configuredExample.template_id,
+        }
+      } catch (e) {
+        console.warn('示例模板应用失败，自动回退默认示例：', e)
+      }
+    }
+
     createForm.item_biz_type = 2
     createForm.sp_biz_type = 1
     createForm.channel_cat_id = 'e11455'
@@ -1704,16 +1916,22 @@ export function useGoofishWorkspace() {
     createForm.publish_shop.province = 330000
     createForm.publish_shop.city = 330100
     createForm.publish_shop.district = 330106
-    createForm.publish_shop.title = ''
-    createForm.publish_shop.content = ''
-    createForm.publish_shop.images_text = ''
+    createForm.publish_shop.title = '95新 iPhone 13 128G 黑色 国行'
+    createForm.publish_shop.content = '机器功能正常，无拆修，电池健康 88%，含原装数据线与保护壳，可同城当面验机。'
+    createForm.publish_shop.images_text = [
+      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=900',
+      'https://images.unsplash.com/photo-1598327105666-5b89351aff97?w=900',
+    ].join('\n')
 
     createAdvancedEnabled.value = false
     createAdvancedJson.value = '{}'
     createOptionalPanels.value = []
     createProductError.value = ''
     createProductResult.value = ''
-    ElMessage.success('已填入基础模板，请填写真实商品信息后再提交')
+    ElMessage.success('未配置示例模板，已回退默认示例内容')
+    return {
+      source: 'default',
+    }
   }
 
   function resetCreateForm() {
@@ -1779,9 +1997,13 @@ export function useGoofishWorkspace() {
 
     try {
       await Promise.all([
-        loadLocalTaskRecords(true),
-        loadCallbackRecords(true),
+        loadLocalTaskRecords(silent),
+        loadCallbackRecords(silent),
       ])
+
+      if (!silent && taskCenterError.value) {
+        ElMessage.error(taskCenterError.value)
+      }
     } finally {
       if (!silent) {
         callbackLoading.value = false
@@ -1799,12 +2021,10 @@ export function useGoofishWorkspace() {
       if (data.success && Array.isArray(data.data)) {
         localTaskRecords.value = data.data.filter((record) => !isDemoLocalTaskRecord(record))
       } else {
-        localTaskError.value = data.detail || '任务记录读取失败'
-        if (!silent) ElMessage.error(localTaskError.value)
+        localTaskError.value = buildTaskCenterError('任务记录', data.detail || '服务返回异常')
       }
     } catch (e) {
-      localTaskError.value = '任务记录读取失败：' + e.message
-      if (!silent) ElMessage.error(localTaskError.value)
+      localTaskError.value = buildTaskCenterError('任务记录', e.message)
     } finally {
       if (!silent) localTaskLoading.value = false
     }
@@ -1819,12 +2039,10 @@ export function useGoofishWorkspace() {
       if (data.success && Array.isArray(data.data)) {
         callbackRecords.value = data.data.filter((record) => !isDemoCallbackRecord(record))
       } else {
-        callbackError.value = data.detail || '处理记录读取失败'
-        if (!silent) ElMessage.error(callbackError.value)
+        callbackError.value = buildTaskCenterError('回调记录', data.detail || '服务返回异常')
       }
     } catch (e) {
-      callbackError.value = '处理记录读取失败：' + e.message
-      if (!silent) ElMessage.error(callbackError.value)
+      callbackError.value = buildTaskCenterError('回调记录', e.message)
     } finally {
       if (!silent) callbackLoading.value = false
     }
@@ -1893,6 +2111,9 @@ export function useGoofishWorkspace() {
     templatesLoading,
     templatesError,
     savingTemplate,
+    updatingTemplate,
+    exampleTemplateId,
+    exampleTemplate,
     templateDraft,
     queryingOrders,
     orders,
@@ -1921,6 +2142,7 @@ export function useGoofishWorkspace() {
     localTaskRecords,
     localTaskLoading,
     localTaskError,
+    taskCenterError,
     runningTaskCount,
     productDetailDialogVisible,
     productDetailLoading,
@@ -1956,6 +2178,8 @@ export function useGoofishWorkspace() {
     saveCurrentFormAsTemplate,
     createTemplateFromSelectedProduct,
     applyTemplate,
+    updateTemplate,
+    setTemplateAsExample,
     removeTemplate,
     saveConfig,
     handleProductsCurrentPageChange,

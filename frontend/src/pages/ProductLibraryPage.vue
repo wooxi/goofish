@@ -172,16 +172,34 @@
 
         <div v-if="store.templates.value.length > 0" class="table-scroll">
           <el-table :data="store.templates.value" stripe class="data-table products-table">
-            <el-table-column prop="name" label="模板名称" min-width="180" />
-            <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
+            <el-table-column label="模板名称" min-width="220">
+              <template #default="scope">
+                <div class="template-name-cell">
+                  <span>{{ scope.row.name }}</span>
+                  <el-tag v-if="scope.row.is_example" type="success" size="small">示例</el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
             <el-table-column prop="source" label="来源" width="120" />
             <el-table-column label="更新时间" width="180">
               <template #default="scope">{{ store.formatDateTime(scope.row.updated_at) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="220">
+            <el-table-column label="操作" min-width="340">
               <template #default="scope">
-                <el-button link type="primary" @click="applyTemplateAndOpen(scope.row)">应用到发布抽屉</el-button>
-                <el-button link type="danger" @click="store.removeTemplate(scope.row)">删除</el-button>
+                <div class="template-op-cell">
+                  <el-button link type="primary" @click="applyTemplateAndOpen(scope.row)">应用到发布抽屉</el-button>
+                  <el-button
+                    link
+                    type="success"
+                    :disabled="scope.row.is_example"
+                    @click="setTemplateAsExample(scope.row)"
+                  >
+                    {{ scope.row.is_example ? '当前示例' : '设为示例内容' }}
+                  </el-button>
+                  <el-button link type="primary" @click="openTemplateEditor(scope.row)">编辑</el-button>
+                  <el-button link type="danger" @click="store.removeTemplate(scope.row)">删除</el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -194,6 +212,101 @@
     </el-card>
 
     <ProductDetailDialog />
+
+    <el-dialog
+      v-model="templateEditorVisible"
+      title="编辑模板"
+      width="760px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-form label-width="120px" class="compact-form">
+        <div class="form-grid-two mb-3">
+          <el-form-item label="模板名称" required>
+            <el-input v-model.trim="templateEditorForm.name" maxlength="80" placeholder="请输入模板名称" />
+          </el-form-item>
+          <el-form-item label="模板说明">
+            <el-input v-model.trim="templateEditorForm.description" maxlength="120" placeholder="选填" />
+          </el-form-item>
+          <el-form-item label="商品类型" required>
+            <el-select v-model="templateEditorForm.item_biz_type" style="width: 100%">
+              <el-option v-for="item in store.ITEM_BIZ_TYPE_OPTIONS" :key="`editor-item-${item.value}`" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="行业类目" required>
+            <el-select v-model="templateEditorForm.sp_biz_type" style="width: 100%">
+              <el-option v-for="item in store.SP_BIZ_TYPE_OPTIONS" :key="`editor-sp-${item.value}`" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="商品类目编码">
+            <el-input v-model.trim="templateEditorForm.channel_cat_id" placeholder="例如 e11455" />
+          </el-form-item>
+          <el-form-item label="店铺账号">
+            <el-select
+              v-model="templateEditorForm.user_name"
+              filterable
+              allow-create
+              clearable
+              default-first-option
+              placeholder="请选择或输入店铺账号"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="shop in store.shopOptions.value"
+                :key="`editor-shop-${shop.user_name}`"
+                :label="shop.label"
+                :value="shop.user_name"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="售价（分）" required>
+            <el-input-number v-model="templateEditorForm.price" :min="1" :max="9999999900" :step="1" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="运费（分）" required>
+            <el-input-number v-model="templateEditorForm.express_fee" :min="0" :step="1" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="库存" required>
+            <el-input-number v-model="templateEditorForm.stock" :min="1" :max="399960" :step="1" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="发货省代码">
+            <el-input-number v-model="templateEditorForm.province" :step="1" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="发货市代码">
+            <el-input-number v-model="templateEditorForm.city" :step="1" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="发货区代码">
+            <el-input-number v-model="templateEditorForm.district" :step="1" style="width: 100%" />
+          </el-form-item>
+        </div>
+
+        <el-form-item label="商品标题" required>
+          <el-input v-model.trim="templateEditorForm.title" maxlength="60" show-word-limit placeholder="请输入商品标题" />
+        </el-form-item>
+        <el-form-item label="商品描述" required>
+          <el-input
+            v-model="templateEditorForm.content"
+            type="textarea"
+            :rows="4"
+            maxlength="5000"
+            show-word-limit
+            placeholder="请输入商品描述"
+          />
+        </el-form-item>
+        <el-form-item label="图片链接">
+          <el-input
+            v-model="templateEditorForm.images_text"
+            type="textarea"
+            :rows="4"
+            placeholder="每行一个图片 URL，也支持逗号分隔"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="templateEditorVisible = false">取消</el-button>
+        <el-button type="primary" :loading="store.updatingTemplate.value" @click="saveTemplateEditor">保存模板</el-button>
+      </template>
+    </el-dialog>
 
     <el-drawer
       v-model="createDrawerVisible"
@@ -218,7 +331,7 @@
 
           <template v-if="publishMode === 'single'">
             <div class="op-actions">
-              <el-button text @click="fillSingleExample">填充示例内容</el-button>
+              <el-button text @click="fillSingleExample">一键填充示例</el-button>
               <el-button text @click="resetSingleForm">清空当前填写</el-button>
             </div>
 
@@ -553,6 +666,36 @@ const store = inject('goofishWorkspace')
 const createDrawerVisible = ref(false)
 const publishMode = ref('single')
 const drawerSize = computed(() => (store.isCompactViewport.value ? '96vw' : '78vw'))
+const templateEditorVisible = ref(false)
+const editingTemplateId = ref('')
+
+function getDefaultTemplateEditorForm() {
+  return {
+    name: '',
+    description: '',
+    source: 'manual',
+    item_biz_type: 2,
+    sp_biz_type: 1,
+    channel_cat_id: '',
+    price: 1,
+    express_fee: 0,
+    stock: 1,
+    user_name: '',
+    province: null,
+    city: null,
+    district: null,
+    title: '',
+    content: '',
+    images_text: '',
+  }
+}
+
+const templateEditorForm = reactive(getDefaultTemplateEditorForm())
+
+function resetTemplateEditorForm() {
+  Object.assign(templateEditorForm, getDefaultTemplateEditorForm())
+  editingTemplateId.value = ''
+}
 
 const singleSubmitFeedback = computed(() => {
   const errorText = String(store.createProductError?.value || '').trim()
@@ -1018,23 +1161,11 @@ function syncCategoryInputWithCurrentOptions() {
   singleForm.channelCatIdManual = ''
 }
 
-function fillSingleExample() {
-  singleForm.item_biz_type = 2
-  singleForm.sp_biz_type = 1
-  singleForm.categoryValue = 'e11455'
-  singleForm.channelCatIdManual = ''
-  singleForm.priceYuan = '199.00'
-  singleForm.expressFeeYuan = '0.00'
-  singleForm.stock = 5
-  singleForm.user_name = String(store.defaultShopUserName.value || '')
-  singleForm.regionCodes = [330000, 330100, 330106]
-  singleForm.title = '95新 iPhone 13 128G 黑色 国行'
-  singleForm.content = '机器功能正常，无拆修，电池健康 88%，含原装数据线与保护壳，可同城当面验机。'
-  singleForm.images = [
-    { uid: `${Date.now()}-1`, url: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=900' },
-    { uid: `${Date.now()}-2`, url: 'https://images.unsplash.com/photo-1598327105666-5b89351aff97?w=900' },
-  ]
-  store.createProductError.value = ''
+async function fillSingleExample() {
+  store.fillCreateExample()
+  syncSingleFormFromStore()
+  await loadCategoryOptionsFromApi(singleForm.item_biz_type, singleForm.sp_biz_type)
+  syncCategoryInputWithCurrentOptions()
 }
 
 function resetSingleForm() {
@@ -1127,6 +1258,117 @@ function normalizeImageUrls(rawValue) {
 
   const splitByPipe = text.includes('|') ? text.split('|') : text.split(/[\n,;]/g)
   return splitByPipe.map((item) => item.trim()).filter(Boolean)
+}
+
+function normalizeOptionalInteger(value) {
+  if (value === null || value === undefined || value === '') return null
+  const num = Number(value)
+  return Number.isInteger(num) ? num : null
+}
+
+function normalizeOptionalNumber(value, fallback = 0) {
+  const num = Number(value)
+  return Number.isInteger(num) ? num : fallback
+}
+
+function openTemplateEditor(template) {
+  const templateData = template?.template_data || {}
+  const publishShop = templateData?.publish_shop || {}
+
+  editingTemplateId.value = String(template?.template_id || '').trim()
+  Object.assign(templateEditorForm, {
+    name: String(template?.name || '').trim(),
+    description: String(template?.description || '').trim(),
+    source: String(template?.source || 'manual'),
+    item_biz_type: Number(templateData?.item_biz_type) || 2,
+    sp_biz_type: Number(templateData?.sp_biz_type) || 1,
+    channel_cat_id: String(templateData?.channel_cat_id || '').trim(),
+    price: normalizeOptionalNumber(templateData?.price, 1),
+    express_fee: normalizeOptionalNumber(templateData?.express_fee, 0),
+    stock: normalizeOptionalNumber(templateData?.stock, 1),
+    user_name: String(publishShop?.user_name || '').trim(),
+    province: normalizeOptionalInteger(publishShop?.province),
+    city: normalizeOptionalInteger(publishShop?.city),
+    district: normalizeOptionalInteger(publishShop?.district),
+    title: String(publishShop?.title || '').trim(),
+    content: String(publishShop?.content || '').trim(),
+    images_text: normalizeImageUrls(publishShop?.images || []).join('\n'),
+  })
+
+  templateEditorVisible.value = true
+}
+
+function validateTemplateEditor() {
+  if (!editingTemplateId.value) return '模板 ID 缺失，请关闭后重试'
+  if (!templateEditorForm.name || templateEditorForm.name.length > 80) return '模板名称长度需为 1~80 字'
+
+  if (!ITEM_BIZ_TYPE_SET.has(Number(templateEditorForm.item_biz_type))) return '请选择有效的商品类型'
+  if (!SP_BIZ_TYPE_SET.has(Number(templateEditorForm.sp_biz_type))) return '请选择有效的行业类目'
+
+  const price = Number(templateEditorForm.price)
+  if (!Number.isInteger(price) || price < 1) return '售价需为不小于 1 的整数（单位：分）'
+
+  const expressFee = Number(templateEditorForm.express_fee)
+  if (!Number.isInteger(expressFee) || expressFee < 0) return '运费需为不小于 0 的整数（单位：分）'
+
+  const stock = Number(templateEditorForm.stock)
+  if (!Number.isInteger(stock) || stock < 1) return '库存需为不小于 1 的整数'
+
+  if (!templateEditorForm.title || templateEditorForm.title.length > 60) return '商品标题长度需为 1~60 字'
+  if (!templateEditorForm.content || templateEditorForm.content.length < 5 || templateEditorForm.content.length > 5000) {
+    return '商品描述长度需为 5~5000 字'
+  }
+
+  const images = normalizeImageUrls(templateEditorForm.images_text)
+  if (images.length > 30) return '商品图片最多支持 30 张'
+
+  return ''
+}
+
+function buildTemplateEditorPayload() {
+  const images = normalizeImageUrls(templateEditorForm.images_text)
+
+  return {
+    name: String(templateEditorForm.name || '').trim(),
+    description: String(templateEditorForm.description || '').trim(),
+    source: String(templateEditorForm.source || 'manual'),
+    template_data: {
+      item_biz_type: Number(templateEditorForm.item_biz_type),
+      sp_biz_type: Number(templateEditorForm.sp_biz_type),
+      channel_cat_id: String(templateEditorForm.channel_cat_id || '').trim(),
+      price: Number(templateEditorForm.price),
+      express_fee: Number(templateEditorForm.express_fee),
+      stock: Number(templateEditorForm.stock),
+      publish_shop: {
+        user_name: String(templateEditorForm.user_name || '').trim(),
+        province: normalizeOptionalInteger(templateEditorForm.province),
+        city: normalizeOptionalInteger(templateEditorForm.city),
+        district: normalizeOptionalInteger(templateEditorForm.district),
+        title: String(templateEditorForm.title || '').trim(),
+        content: String(templateEditorForm.content || '').trim(),
+        images,
+      },
+    },
+  }
+}
+
+async function saveTemplateEditor() {
+  const validationError = validateTemplateEditor()
+  if (validationError) {
+    ElMessage.warning(validationError)
+    return
+  }
+
+  const payload = buildTemplateEditorPayload()
+  const updated = await store.updateTemplate(editingTemplateId.value, payload)
+  if (updated) {
+    templateEditorVisible.value = false
+    resetTemplateEditorForm()
+  }
+}
+
+async function setTemplateAsExample(template) {
+  await store.setTemplateAsExample(template)
 }
 
 function buildCreatePayloadFromUiFields(fields) {
@@ -1690,6 +1932,12 @@ watch(createDrawerVisible, async (visible) => {
   await loadCategoryOptionsFromApi(singleForm.item_biz_type, singleForm.sp_biz_type)
   syncCategoryInputWithCurrentOptions()
 })
+
+watch(templateEditorVisible, (visible) => {
+  if (!visible) {
+    resetTemplateEditorForm()
+  }
+})
 </script>
 
 <style scoped>
@@ -1732,6 +1980,18 @@ watch(createDrawerVisible, async (visible) => {
 
 .single-form :deep(.el-form-item) {
   margin-bottom: 12px;
+}
+
+.template-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-op-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
 }
 
 .single-form :deep(.el-form-item__label) {

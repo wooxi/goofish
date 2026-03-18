@@ -4,7 +4,7 @@
       <div class="card-header">
         <span>➕ 发布新商品</span>
         <div class="header-actions">
-          <el-button text @click="store.fillCreateExample">一键填入示例</el-button>
+          <el-button text @click="store.fillCreateExample">一键填充示例</el-button>
           <el-button text @click="store.resetCreateForm">重置</el-button>
         </div>
       </div>
