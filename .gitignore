@@ -43,6 +43,7 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+.watchdog.lock
 
 # Runtime data
 data/*.jsonl

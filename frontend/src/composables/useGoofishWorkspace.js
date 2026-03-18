@@ -10,9 +10,7 @@ export function useGoofishWorkspace() {
   if (workspaceInstance) return workspaceInstance
 
 
-  const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:8001'
-    : `http://${window.location.hostname}:8001`
+  const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
 
   const SHOP_QUERY_CACHE_KEY = 'goofish:shops-query-cache:v1'
   const PRODUCT_QUERY_CACHE_KEY = 'goofish:products-query-cache:v1'

@@ -719,9 +719,7 @@ const singleSubmitFeedback = computed(() => {
   return null
 })
 
-const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8001'
-  : `http://${window.location.hostname}:8001`
+const API_BASE = store.API_BASE
 
 const regionCascaderProps = {
   emitPath: true,
