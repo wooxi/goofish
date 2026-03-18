@@ -21,12 +21,15 @@ CONFIG_FILE = PROJECT_ROOT / "config" / "app_config.json"
 CALLBACK_FILE = PROJECT_ROOT / "data" / "product_callback_records.jsonl"
 LOCAL_TASK_FILE = PROJECT_ROOT / "data" / "product_local_task_records.jsonl"
 TEMPLATE_FILE = PROJECT_ROOT / "data" / "product_templates.json"
+TEMPLATE_PREFERENCES_FILE = PROJECT_ROOT / "data" / "product_template_preferences.json"
+REGION_SQL_FILE = PROJECT_ROOT / "docs" / "闲管家省市区.sql"
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 CALLBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
 LOCAL_TASK_FILE.parent.mkdir(parents=True, exist_ok=True)
 TEMPLATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+TEMPLATE_PREFERENCES_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # ── 日志配置 ──
 LOG_FILE = LOG_DIR / "backend.log"
@@ -55,26 +58,56 @@ import httpx
 import time
 import hashlib
 import json
+import re
 import uvicorn
 
 # ── FastAPI 应用 ──
 app = FastAPI(title="Goofish 闲鱼管理 API", version="1.0.0")
 
-# 端口配置（8000-8010 范围）
+
+def _parse_csv_env(name: str, default: str) -> List[str]:
+    raw_value = os.environ.get(name, default)
+    return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+
+def _parse_bool_env(name: str, default: bool = False) -> bool:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# 端口与运行参数
+BACKEND_HOST = os.environ.get("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT = int(os.environ.get("BACKEND_PORT", "8001"))
+API_BASE = os.environ.get("GOOFISH_API_BASE", "https://open.goofish.pro").rstrip("/")
+
+CORS_ALLOW_ORIGINS = _parse_csv_env("CORS_ALLOW_ORIGINS", "*")
+CORS_ALLOW_METHODS = _parse_csv_env("CORS_ALLOW_METHODS", "*")
+CORS_ALLOW_HEADERS = _parse_csv_env("CORS_ALLOW_HEADERS", "*")
+CORS_ALLOW_CREDENTIALS = _parse_bool_env("CORS_ALLOW_CREDENTIALS", False)
+
+if "*" in CORS_ALLOW_ORIGINS and CORS_ALLOW_CREDENTIALS:
+    logger.warning("检测到 CORS_ALLOW_ORIGINS=* 且允许凭证，已自动降级 allow_credentials=False")
+    CORS_ALLOW_CREDENTIALS = False
 
 logger.info("=" * 60)
 logger.info("🐟 Goofish Backend 启动中...")
 logger.info(f"📂 项目根目录：{PROJECT_ROOT}")
 logger.info(f"📝 日志文件：{LOG_FILE}")
 logger.info(f"📄 配置文件：{CONFIG_FILE}")
-logger.info(f"🔌 服务端口：{BACKEND_PORT}")
+logger.info(f"🔌 服务监听：{BACKEND_HOST}:{BACKEND_PORT}")
+logger.info(f"🌐 上游 API：{API_BASE}")
+logger.info(f"🛡️ CORS Origins：{CORS_ALLOW_ORIGINS}")
 logger.info("=" * 60)
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-# API 基础 URL - 严格按照文档
-API_BASE = "https://open.goofish.pro"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
+    allow_methods=CORS_ALLOW_METHODS,
+    allow_headers=CORS_ALLOW_HEADERS,
+)
 
 # ── 配置管理 ──
 class AppConfig(BaseModel):
@@ -112,6 +145,129 @@ def save_config_to_file(config: AppConfig) -> bool:
         return False
 
 config = load_config()
+
+_REGION_SQL_PATTERN = re.compile(
+    r"VALUES\s*\(\s*(\d+)\s*,\s*'((?:''|[^'])*)'\s*,\s*(\d+)\s*,\s*'((?:''|[^'])*)'\s*,\s*(\d+)\s*,\s*'((?:''|[^'])*)'\s*\)",
+    re.IGNORECASE,
+)
+_REGION_TREE_CACHE: Optional[Dict[str, Any]] = None
+
+
+def _decode_sql_text(value: str) -> str:
+    return value.replace("''", "'").strip()
+
+
+def _parse_regions_tree_from_sql(sql_path: Path) -> Dict[str, Any]:
+    provinces: Dict[int, Dict[str, Any]] = {}
+    record_count = 0
+
+    with open(sql_path, "r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            matched = _REGION_SQL_PATTERN.search(line)
+            if not matched:
+                continue
+
+            prov_id = int(matched.group(1))
+            prov_name = _decode_sql_text(matched.group(2))
+            city_id = int(matched.group(3))
+            city_name = _decode_sql_text(matched.group(4))
+            area_id = int(matched.group(5))
+            area_name = _decode_sql_text(matched.group(6))
+            record_count += 1
+
+            province_node = provinces.setdefault(
+                prov_id,
+                {"label": prov_name, "value": prov_id, "_cities": {}},
+            )
+
+            if not province_node.get("label") and prov_name:
+                province_node["label"] = prov_name
+
+            city_map: Dict[int, Dict[str, Any]] = province_node["_cities"]
+            city_node = city_map.setdefault(
+                city_id,
+                {"label": city_name, "value": city_id, "_districts": {}},
+            )
+            if not city_node.get("label") and city_name:
+                city_node["label"] = city_name
+
+            district_map: Dict[int, Dict[str, Any]] = city_node["_districts"]
+            district_map.setdefault(area_id, {"label": area_name, "value": area_id})
+
+    if record_count == 0:
+        raise RuntimeError(f"未在地区 SQL 中解析到任何记录：{sql_path}")
+
+    province_nodes: List[Dict[str, Any]] = []
+    city_count = 0
+    district_count = 0
+
+    for prov_id in sorted(provinces.keys()):
+        province_node = provinces[prov_id]
+        city_nodes: List[Dict[str, Any]] = []
+
+        city_map = province_node.get("_cities") or {}
+        for city_id in sorted(city_map.keys()):
+            city_node = city_map[city_id]
+            district_map = city_node.get("_districts") or {}
+            district_nodes = [district_map[district_id] for district_id in sorted(district_map.keys())]
+            district_count += len(district_nodes)
+            city_count += 1
+            city_nodes.append(
+                {
+                    "label": city_node.get("label") or str(city_id),
+                    "value": city_node.get("value") or city_id,
+                    "children": district_nodes,
+                }
+            )
+
+        province_nodes.append(
+            {
+                "label": province_node.get("label") or str(prov_id),
+                "value": province_node.get("value") or prov_id,
+                "children": city_nodes,
+            }
+        )
+
+    return {
+        "data": province_nodes,
+        "stats": {
+            "province_count": len(province_nodes),
+            "city_count": city_count,
+            "district_count": district_count,
+            "record_count": record_count,
+        },
+    }
+
+
+def get_regions_tree_cached() -> Dict[str, Any]:
+    global _REGION_TREE_CACHE
+
+    if not REGION_SQL_FILE.exists():
+        raise FileNotFoundError(f"地区数据文件不存在：{REGION_SQL_FILE}")
+
+    modified_at = REGION_SQL_FILE.stat().st_mtime
+    if _REGION_TREE_CACHE and _REGION_TREE_CACHE.get("modified_at") == modified_at:
+        return _REGION_TREE_CACHE
+
+    parsed = _parse_regions_tree_from_sql(REGION_SQL_FILE)
+    _REGION_TREE_CACHE = {
+        "modified_at": modified_at,
+        "loaded_at": datetime.now().isoformat(),
+        "source": str(REGION_SQL_FILE),
+        **parsed,
+    }
+    logger.info(
+        "✅ 地区树已加载：省份=%s 城市=%s 区县=%s",
+        parsed["stats"]["province_count"],
+        parsed["stats"]["city_count"],
+        parsed["stats"]["district_count"],
+    )
+    return _REGION_TREE_CACHE
+
 
 # ── 签名生成（严格按照文档）──
 def generate_sign(appid: int, body_string: str, timestamp: int, appsecret: str) -> str:
@@ -274,6 +430,40 @@ async def call_open_api_get(
 # ── 商品参数校验（严格按接口文档的最小必填集合）──
 ITEM_BIZ_TYPE_ALLOWED = {2, 0, 10, 16, 19, 24, 26, 35}
 SP_BIZ_TYPE_ALLOWED = {1, 2, 3, 8, 9, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 33, 99}
+ITEM_BIZ_TYPE_LABELS = {
+    2: "普通商品",
+    0: "已验货",
+    10: "验货宝",
+    16: "品牌授权",
+    19: "闲鱼严选",
+    24: "闲鱼特卖",
+    26: "品牌捡漏",
+    35: "跨境商品",
+}
+SP_BIZ_TYPE_LABELS = {
+    1: "手机",
+    2: "潮品",
+    3: "家电",
+    8: "乐器",
+    9: "3C数码",
+    16: "奢品",
+    17: "母婴",
+    18: "美妆个护",
+    19: "文玩/珠宝",
+    20: "游戏电玩",
+    21: "家居",
+    22: "虚拟游戏",
+    23: "租号",
+    24: "图书",
+    25: "卡券",
+    27: "食品",
+    28: "潮玩",
+    29: "二手车",
+    30: "宠植",
+    31: "工艺礼品",
+    33: "汽车服务",
+    99: "其他",
+}
 CREATE_REQUIRED_FIELDS = ["item_biz_type", "sp_biz_type", "channel_cat_id", "price", "express_fee", "stock", "publish_shop"]
 PUBLISH_REQUIRED_FIELDS = ["product_id", "user_name"]
 PUBLISH_SHOP_REQUIRED_FIELDS = ["user_name", "province", "city", "district", "title", "content", "images"]
@@ -295,6 +485,17 @@ CALLBACK_REQUIRED_FIELDS = [
 BATCH_PUBLISH_TASK_KEEP = 200
 BATCH_DOWNSHELF_TASK_KEEP = 200
 BATCH_DELETE_TASK_KEEP = 200
+
+BATCH_CREATE_DEFAULT_MAX_RETRIES = 1
+BATCH_CREATE_MAX_RETRIES_LIMIT = 3
+BATCH_CREATE_DEFAULT_RETRY_BACKOFF_SECONDS = 0.8
+BATCH_CREATE_MAX_RETRY_BACKOFF_SECONDS = 10.0
+BATCH_CREATE_DEFAULT_PER_ITEM_TIMEOUT_SECONDS = 35.0
+BATCH_CREATE_MAX_PER_ITEM_TIMEOUT_SECONDS = 120.0
+BATCH_CREATE_DEFAULT_BATCH_TIMEOUT_SECONDS = 600.0
+BATCH_CREATE_MAX_BATCH_TIMEOUT_SECONDS = 3600.0
+BATCH_CREATE_RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
 batch_publish_tasks: Dict[str, Dict[str, Any]] = {}
 batch_publish_task_order: List[str] = []
 batch_downshelf_tasks: Dict[str, Dict[str, Any]] = {}
@@ -648,6 +849,41 @@ def save_templates(templates: List[Dict[str, Any]]) -> None:
         json.dump(templates, f, ensure_ascii=False, indent=2)
 
 
+def load_template_preferences() -> Dict[str, Any]:
+    if not TEMPLATE_PREFERENCES_FILE.exists():
+        return {}
+
+    try:
+        with open(TEMPLATE_PREFERENCES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            return {}
+    except Exception as e:
+        logger.error(f"❌ 读取模板偏好配置失败：{e}", exc_info=True)
+        return {}
+
+
+def save_template_preferences(preferences: Dict[str, Any]) -> None:
+    with open(TEMPLATE_PREFERENCES_FILE, "w", encoding="utf-8") as f:
+        json.dump(preferences, f, ensure_ascii=False, indent=2)
+
+
+def get_example_template_id() -> str:
+    preferences = load_template_preferences()
+    return str(preferences.get("example_template_id") or "").strip()
+
+
+def set_example_template_id(template_id: Optional[str]) -> None:
+    preferences = load_template_preferences()
+    normalized = str(template_id or "").strip()
+    if normalized:
+        preferences["example_template_id"] = normalized
+    else:
+        preferences.pop("example_template_id", None)
+    save_template_preferences(preferences)
+
+
 def normalize_template_data(template_data: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(template_data, dict):
         raise ValueError("template_data 必须是对象")
@@ -701,6 +937,190 @@ async def global_exception_handler(request, exc):
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "goofish-backend", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/api/regions/tree")
+async def get_regions_tree():
+    try:
+        region_payload = get_regions_tree_cached()
+        return {
+            "success": True,
+            "data": region_payload.get("data", []),
+            "stats": region_payload.get("stats", {}),
+            "source": region_payload.get("source"),
+            "loaded_at": region_payload.get("loaded_at"),
+        }
+    except FileNotFoundError as e:
+        logger.error(f"❌ 地区数据文件缺失：{e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ 地区树加载失败：{e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"地区树加载失败：{e}")
+
+
+def _build_product_category_options(category_rows: List[Dict[str, Any]], item_biz_type: int) -> Dict[str, Any]:
+    grouped: Dict[str, Dict[str, Any]] = {}
+    flat_rows: List[Dict[str, Any]] = []
+
+    for row in category_rows:
+        if not isinstance(row, dict):
+            continue
+
+        channel_cat_id = str(row.get("channel_cat_id") or "").strip()
+        if not channel_cat_id:
+            continue
+
+        channel_cat_name = str(row.get("channel_cat_name") or channel_cat_id).strip()
+
+        raw_sp_biz_type = row.get("sp_biz_type")
+        try:
+            sp_biz_type = int(raw_sp_biz_type) if raw_sp_biz_type is not None else None
+        except (TypeError, ValueError):
+            sp_biz_type = None
+
+        sp_biz_name = str(row.get("sp_biz_name") or "").strip()
+        if not sp_biz_name and sp_biz_type in SP_BIZ_TYPE_LABELS:
+            sp_biz_name = SP_BIZ_TYPE_LABELS[sp_biz_type]
+        if not sp_biz_name:
+            sp_biz_name = "其他"
+
+        sp_group_key = f"{sp_biz_type}:{sp_biz_name}"
+        group = grouped.setdefault(
+            sp_group_key,
+            {
+                "label": f"{sp_biz_name}（{sp_biz_type if sp_biz_type is not None else '-'}）",
+                "value": f"sp_{sp_biz_type if sp_biz_type is not None else 'unknown'}",
+                "sp_biz_type": sp_biz_type,
+                "sp_biz_name": sp_biz_name,
+                "children": [],
+            },
+        )
+
+        child = {
+            "label": channel_cat_name,
+            "value": channel_cat_id,
+            "categoryCode": channel_cat_id,
+            "categoryId": channel_cat_id,
+            "channel_cat_id": channel_cat_id,
+            "channel_cat_name": channel_cat_name,
+            "item_biz_type": item_biz_type,
+            "sp_biz_type": sp_biz_type,
+            "sp_biz_name": sp_biz_name,
+        }
+
+        if not any(existing.get("value") == child["value"] for existing in group["children"]):
+            group["children"].append(child)
+            flat_rows.append(child)
+
+    options = list(grouped.values())
+    options.sort(key=lambda node: (node.get("sp_biz_type") is None, node.get("sp_biz_type") if isinstance(node.get("sp_biz_type"), int) else 9999, node.get("label") or ""))
+    for group in options:
+        group["children"].sort(key=lambda node: node.get("label") or "")
+
+    return {
+        "options": options,
+        "flat": flat_rows,
+    }
+
+
+@app.get("/api/products/category/options")
+async def get_product_category_options(
+    item_biz_type: int = Query(..., description="商品类型 item_biz_type"),
+    sp_biz_type: Optional[int] = Query(default=None, description="行业类型 sp_biz_type"),
+    flash_sale_type: Optional[int] = Query(default=None, description="闲鱼特卖类型（可选）"),
+):
+    if item_biz_type not in ITEM_BIZ_TYPE_ALLOWED:
+        raise HTTPException(status_code=400, detail=f"item_biz_type 不在可用范围：{sorted(ITEM_BIZ_TYPE_ALLOWED)}")
+
+    if sp_biz_type is not None and sp_biz_type not in SP_BIZ_TYPE_ALLOWED:
+        raise HTTPException(status_code=400, detail=f"sp_biz_type 不在可用范围：{sorted(SP_BIZ_TYPE_ALLOWED)}")
+
+    request_body: Dict[str, Any] = {"item_biz_type": item_biz_type}
+    if sp_biz_type is not None:
+        request_body["sp_biz_type"] = sp_biz_type
+    if flash_sale_type is not None:
+        request_body["flash_sale_type"] = flash_sale_type
+
+    api_result, elapsed = await call_open_api(
+        path="/api/open/product/category/list",
+        body=request_body,
+        action_name="查询商品类目",
+    )
+
+    raw_data = api_result.get("data") or {}
+    raw_list = raw_data.get("list") if isinstance(raw_data, dict) else []
+    if not isinstance(raw_list, list):
+        raw_list = []
+
+    formatted = _build_product_category_options(raw_list, item_biz_type=item_biz_type)
+
+    return {
+        "success": True,
+        "item_biz_type": item_biz_type,
+        "item_biz_name": ITEM_BIZ_TYPE_LABELS.get(item_biz_type, str(item_biz_type)),
+        "sp_biz_type": sp_biz_type,
+        "sp_biz_name": SP_BIZ_TYPE_LABELS.get(sp_biz_type) if sp_biz_type is not None else None,
+        "flash_sale_type": flash_sale_type,
+        "data": formatted["options"],
+        "flat": formatted["flat"],
+        "count": len(formatted["flat"]),
+        "raw": raw_data,
+        "message": api_result.get("msg", "OK"),
+        "query_time": f"{elapsed:.2f}s",
+    }
+
+
+@app.get("/api/products/pv/options")
+async def get_product_property_options(
+    item_biz_type: int = Query(..., description="商品类型 item_biz_type"),
+    sp_biz_type: int = Query(..., description="行业类型 sp_biz_type"),
+    channel_cat_id: str = Query(..., min_length=1, description="渠道类目ID channel_cat_id"),
+    sub_property_id: Optional[str] = Query(default=None, description="下级属性ID（可选）"),
+):
+    if item_biz_type not in ITEM_BIZ_TYPE_ALLOWED:
+        raise HTTPException(status_code=400, detail=f"item_biz_type 不在可用范围：{sorted(ITEM_BIZ_TYPE_ALLOWED)}")
+
+    if sp_biz_type not in SP_BIZ_TYPE_ALLOWED:
+        raise HTTPException(status_code=400, detail=f"sp_biz_type 不在可用范围：{sorted(SP_BIZ_TYPE_ALLOWED)}")
+
+    normalized_cat_id = channel_cat_id.strip()
+    if not normalized_cat_id:
+        raise HTTPException(status_code=400, detail="channel_cat_id 不能为空")
+
+    request_body: Dict[str, Any] = {
+        "item_biz_type": item_biz_type,
+        "sp_biz_type": sp_biz_type,
+        "channel_cat_id": normalized_cat_id,
+    }
+    if isinstance(sub_property_id, str) and sub_property_id.strip():
+        request_body["sub_property_id"] = sub_property_id.strip()
+
+    api_result, elapsed = await call_open_api(
+        path="/api/open/product/pv/list",
+        body=request_body,
+        action_name="查询商品属性",
+    )
+
+    raw_data = api_result.get("data") or {}
+    property_list = raw_data.get("list") if isinstance(raw_data, dict) else []
+    if not isinstance(property_list, list):
+        property_list = []
+
+    return {
+        "success": True,
+        "item_biz_type": item_biz_type,
+        "item_biz_name": ITEM_BIZ_TYPE_LABELS.get(item_biz_type, str(item_biz_type)),
+        "sp_biz_type": sp_biz_type,
+        "sp_biz_name": SP_BIZ_TYPE_LABELS.get(sp_biz_type, str(sp_biz_type)),
+        "channel_cat_id": normalized_cat_id,
+        "sub_property_id": request_body.get("sub_property_id"),
+        "data": property_list,
+        "count": len(property_list),
+        "raw": raw_data,
+        "message": api_result.get("msg", "OK"),
+        "query_time": f"{elapsed:.2f}s",
+    }
+
 
 @app.get("/api/config")
 async def get_config():
@@ -2032,6 +2452,22 @@ async def get_product_detail(product_id: int):
     }
 
 
+async def execute_create_action(payload: Dict[str, Any], action_name: str = "创建商品") -> Dict[str, Any]:
+    validate_create_payload(payload)
+    api_result, elapsed = await call_open_api(
+        path="/api/open/product/create",
+        body=payload,
+        action_name=action_name,
+    )
+
+    return {
+        "data": api_result.get("data"),
+        "raw": api_result,
+        "message": api_result.get("msg", "OK"),
+        "query_time": f"{elapsed:.2f}s",
+    }
+
+
 async def execute_publish_action(payload: Dict[str, Any], action_name: str = "上架商品") -> Dict[str, Any]:
     validate_publish_payload(payload)
     api_result, elapsed = await call_open_api(
@@ -2080,6 +2516,76 @@ async def execute_delete_action(payload: Dict[str, Any], action_name: str = "删
         "message": api_result.get("msg", "OK"),
         "query_time": f"{elapsed:.2f}s",
         "is_async": True,
+    }
+
+
+def normalize_batch_create_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象")
+
+    items = payload.get("items")
+    if not isinstance(items, list) or len(items) == 0:
+        raise HTTPException(status_code=400, detail="items 必须是非空数组")
+    if len(items) > 50:
+        raise HTTPException(status_code=400, detail="单次批量创建最多支持 50 条")
+
+    continue_on_error = payload.get("continue_on_error", True)
+    if not isinstance(continue_on_error, bool):
+        continue_on_error = bool(continue_on_error)
+
+    max_retries = payload.get("max_retries", BATCH_CREATE_DEFAULT_MAX_RETRIES)
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int):
+        raise HTTPException(status_code=400, detail="max_retries 必须是整数")
+    if max_retries < 0 or max_retries > BATCH_CREATE_MAX_RETRIES_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"max_retries 仅支持 0~{BATCH_CREATE_MAX_RETRIES_LIMIT}",
+        )
+
+    retry_backoff_seconds = payload.get("retry_backoff_seconds", BATCH_CREATE_DEFAULT_RETRY_BACKOFF_SECONDS)
+    if isinstance(retry_backoff_seconds, bool) or not isinstance(retry_backoff_seconds, (int, float)):
+        raise HTTPException(status_code=400, detail="retry_backoff_seconds 必须是数字")
+    retry_backoff_seconds = float(retry_backoff_seconds)
+    if retry_backoff_seconds < 0 or retry_backoff_seconds > BATCH_CREATE_MAX_RETRY_BACKOFF_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"retry_backoff_seconds 仅支持 0~{BATCH_CREATE_MAX_RETRY_BACKOFF_SECONDS} 秒",
+        )
+
+    per_item_timeout_seconds = payload.get("per_item_timeout_seconds", BATCH_CREATE_DEFAULT_PER_ITEM_TIMEOUT_SECONDS)
+    if isinstance(per_item_timeout_seconds, bool) or not isinstance(per_item_timeout_seconds, (int, float)):
+        raise HTTPException(status_code=400, detail="per_item_timeout_seconds 必须是数字")
+    per_item_timeout_seconds = float(per_item_timeout_seconds)
+    if per_item_timeout_seconds < 1 or per_item_timeout_seconds > BATCH_CREATE_MAX_PER_ITEM_TIMEOUT_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"per_item_timeout_seconds 仅支持 1~{BATCH_CREATE_MAX_PER_ITEM_TIMEOUT_SECONDS} 秒",
+        )
+
+    batch_timeout_seconds = payload.get("batch_timeout_seconds", BATCH_CREATE_DEFAULT_BATCH_TIMEOUT_SECONDS)
+    if isinstance(batch_timeout_seconds, bool) or not isinstance(batch_timeout_seconds, (int, float)):
+        raise HTTPException(status_code=400, detail="batch_timeout_seconds 必须是数字")
+    batch_timeout_seconds = float(batch_timeout_seconds)
+    if batch_timeout_seconds < 5 or batch_timeout_seconds > BATCH_CREATE_MAX_BATCH_TIMEOUT_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"batch_timeout_seconds 仅支持 5~{BATCH_CREATE_MAX_BATCH_TIMEOUT_SECONDS} 秒",
+        )
+
+    normalized_items: List[Dict[str, Any]] = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail=f"items[{idx}] 必须是对象")
+        normalized_items.append(item)
+
+    return {
+        "items": normalized_items,
+        "continue_on_error": continue_on_error,
+        "max_retries": max_retries,
+        "retry_backoff_seconds": retry_backoff_seconds,
+        "per_item_timeout_seconds": per_item_timeout_seconds,
+        "batch_timeout_seconds": batch_timeout_seconds,
+        "source": payload.get("source") if isinstance(payload.get("source"), str) else "product_library_drawer",
     }
 
 
@@ -2194,6 +2700,241 @@ def normalize_batch_delete_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "user_name": user_name.strip(),
         "notify_url": notify_url.strip() if isinstance(notify_url, str) and notify_url.strip() else None,
         "source": source.strip() if isinstance(source, str) and source.strip() else "products_page",
+    }
+
+
+def _stringify_http_detail(detail: Any) -> str:
+    if isinstance(detail, str):
+        return detail
+    if detail is None:
+        return ""
+    try:
+        return json.dumps(detail, ensure_ascii=False)
+    except Exception:
+        return str(detail)
+
+
+def _is_retryable_batch_create_failure(status_code: int) -> bool:
+    return int(status_code) in BATCH_CREATE_RETRYABLE_STATUS_CODES
+
+
+def _build_batch_create_row_result(index: int) -> Dict[str, Any]:
+    return {
+        "index": index,
+        "row_no": index + 1,
+        "success": False,
+        "status_code": None,
+        "message": None,
+        "error": None,
+        "query_time": None,
+        "data": None,
+        "raw": None,
+        "attempts": 0,
+        "retries": 0,
+        "attempt_details": [],
+    }
+
+
+async def execute_batch_create_sequence(normalized_payload: Dict[str, Any]) -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = normalized_payload["items"]
+    continue_on_error: bool = normalized_payload["continue_on_error"]
+    max_retries: int = int(normalized_payload.get("max_retries", BATCH_CREATE_DEFAULT_MAX_RETRIES))
+    retry_backoff_seconds: float = float(
+        normalized_payload.get("retry_backoff_seconds", BATCH_CREATE_DEFAULT_RETRY_BACKOFF_SECONDS)
+    )
+    per_item_timeout_seconds: float = float(
+        normalized_payload.get("per_item_timeout_seconds", BATCH_CREATE_DEFAULT_PER_ITEM_TIMEOUT_SECONDS)
+    )
+    batch_timeout_seconds: float = float(
+        normalized_payload.get("batch_timeout_seconds", BATCH_CREATE_DEFAULT_BATCH_TIMEOUT_SECONDS)
+    )
+
+    total = len(items)
+    processed = 0
+    success = 0
+    failed = 0
+    results: List[Dict[str, Any]] = []
+    stopped_reason: Optional[str] = None
+    sequence_started_at = time.monotonic()
+
+    for idx, item in enumerate(items):
+        elapsed_total = time.monotonic() - sequence_started_at
+        if elapsed_total >= batch_timeout_seconds:
+            stopped_reason = "batch_timeout"
+            logger.error(
+                "⏰ 批量创建整体超时：已处理 %s/%s，耗时 %.2fs（限制 %.2fs）",
+                processed,
+                total,
+                elapsed_total,
+                batch_timeout_seconds,
+            )
+            break
+
+        row_result = _build_batch_create_row_result(idx)
+        last_error_detail = ""
+        last_status_code = 500
+        row_failed_recorded = False
+
+        for attempt in range(1, max_retries + 2):
+            row_result["attempts"] = attempt
+            elapsed_total = time.monotonic() - sequence_started_at
+            timeout_budget = batch_timeout_seconds - elapsed_total
+            if timeout_budget <= 0:
+                stopped_reason = "batch_timeout"
+                last_error_detail = "批量创建整体超时"
+                last_status_code = 504
+                row_result["attempt_details"].append(
+                    {
+                        "attempt": attempt,
+                        "status_code": 504,
+                        "error": last_error_detail,
+                        "retryable": False,
+                    }
+                )
+                break
+
+            effective_timeout = min(per_item_timeout_seconds, timeout_budget)
+            should_retry = False
+
+            try:
+                single_result = await asyncio.wait_for(
+                    execute_create_action(item, action_name=f"批量创建[{idx + 1}]"),
+                    timeout=effective_timeout,
+                )
+                row_result.update(
+                    {
+                        "success": True,
+                        "status_code": 200,
+                        "message": single_result.get("message", "OK"),
+                        "error": None,
+                        "query_time": single_result.get("query_time"),
+                        "data": single_result.get("data"),
+                        "raw": single_result.get("raw"),
+                    }
+                )
+                success += 1
+                break
+            except asyncio.TimeoutError:
+                last_error_detail = f"单条处理超时（>{effective_timeout:.2f}s）"
+                last_status_code = 504
+                should_retry = True
+                logger.warning(
+                    "⏰ 批量创建第 %s 条第 %s 次尝试超时（timeout=%.2fs）",
+                    idx + 1,
+                    attempt,
+                    effective_timeout,
+                )
+            except ValueError as e:
+                last_error_detail = str(e)
+                last_status_code = 400
+                should_retry = False
+                logger.warning(f"⚠️ 批量创建第 {idx + 1} 条参数校验失败：{e}")
+            except HTTPException as e:
+                last_error_detail = _stringify_http_detail(e.detail)
+                last_status_code = int(e.status_code)
+                should_retry = _is_retryable_batch_create_failure(last_status_code)
+                logger.warning(
+                    "⚠️ 批量创建第 %s 条第 %s 次失败（status=%s, retry=%s）：%s",
+                    idx + 1,
+                    attempt,
+                    last_status_code,
+                    "yes" if should_retry else "no",
+                    last_error_detail,
+                )
+            except Exception as e:
+                last_error_detail = str(e)
+                last_status_code = 500
+                should_retry = True
+                logger.error(f"❌ 批量创建第 {idx + 1} 条异常：{e}", exc_info=True)
+
+            if should_retry and attempt <= max_retries and stopped_reason != "batch_timeout":
+                row_result["attempt_details"].append(
+                    {
+                        "attempt": attempt,
+                        "status_code": last_status_code,
+                        "error": last_error_detail,
+                        "retryable": True,
+                    }
+                )
+                if retry_backoff_seconds > 0:
+                    await asyncio.sleep(min(retry_backoff_seconds * (2 ** (attempt - 1)), 8.0))
+                continue
+
+            row_result["attempt_details"].append(
+                {
+                    "attempt": attempt,
+                    "status_code": last_status_code,
+                    "error": last_error_detail,
+                    "retryable": bool(should_retry),
+                }
+            )
+            row_result.update(
+                {
+                    "success": False,
+                    "status_code": last_status_code,
+                    "message": "创建失败",
+                    "error": last_error_detail,
+                }
+            )
+            failed += 1
+            row_failed_recorded = True
+            break
+
+        if not row_result.get("success") and not row_failed_recorded:
+            row_result.update(
+                {
+                    "success": False,
+                    "status_code": row_result.get("status_code") or last_status_code,
+                    "message": row_result.get("message") or "创建失败",
+                    "error": row_result.get("error") or last_error_detail or "批量创建提前中断",
+                }
+            )
+            failed += 1
+
+        row_result["retries"] = max(row_result["attempts"] - 1, 0)
+
+        results.append(row_result)
+        processed += 1
+
+        if not row_result.get("success") and not continue_on_error:
+            stopped_reason = stopped_reason or "stop_on_error"
+            break
+
+        if stopped_reason == "batch_timeout":
+            break
+
+    status = "success"
+    if failed and success:
+        status = "partial_failed"
+    elif failed and not success:
+        status = "failed"
+
+    stopped_early = processed < total
+    message = "批量创建完成" if status == "success" else "批量创建执行完成（含失败）"
+    if stopped_reason == "batch_timeout":
+        message = f"批量创建提前结束：整体超时（已处理 {processed}/{total}）"
+    elif stopped_reason == "stop_on_error":
+        message = f"批量创建提前结束：第 {processed} 条失败后按配置停止"
+
+    return {
+        "status": status,
+        "summary": {
+            "total": total,
+            "processed": processed,
+            "success": success,
+            "failed": failed,
+        },
+        "results": results,
+        "stopped_early": stopped_early,
+        "stopped_reason": stopped_reason,
+        "batch_options": {
+            "max_retries": max_retries,
+            "retry_backoff_seconds": retry_backoff_seconds,
+            "per_item_timeout_seconds": per_item_timeout_seconds,
+            "batch_timeout_seconds": batch_timeout_seconds,
+            "continue_on_error": continue_on_error,
+        },
+        "message": message,
     }
 
 
@@ -2728,22 +3469,46 @@ async def create_product(payload: Dict[str, Any]):
     logger.info("🆕 创建商品请求")
 
     try:
-        validate_create_payload(payload)
+        result = await execute_create_action(payload, action_name="创建商品")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    api_result, elapsed = await call_open_api(
-        path="/api/open/product/create",
-        body=payload,
-        action_name="创建商品",
+    return {
+        "success": True,
+        **result,
+    }
+
+
+@app.post("/api/products/create/batch")
+async def batch_create_products(payload: Dict[str, Any]):
+    """
+    批量创建商品：复用单件创建校验与调用逻辑，按顺序逐条执行并返回逐条结果。
+    请求示例：
+    {
+        "items": [<单件创建 payload>, ...],
+        "continue_on_error": true,
+        "max_retries": 1,
+        "retry_backoff_seconds": 0.8,
+        "per_item_timeout_seconds": 35,
+        "batch_timeout_seconds": 600
+    }
+    """
+    logger.info("📚 批量创建商品请求")
+
+    normalized_payload = normalize_batch_create_payload(payload)
+    logger.info(
+        "📚 批量创建配置：items=%s continue_on_error=%s max_retries=%s per_item_timeout=%.2fs batch_timeout=%.2fs",
+        len(normalized_payload.get("items") or []),
+        normalized_payload.get("continue_on_error"),
+        normalized_payload.get("max_retries"),
+        float(normalized_payload.get("per_item_timeout_seconds") or 0),
+        float(normalized_payload.get("batch_timeout_seconds") or 0),
     )
+    sequence_result = await execute_batch_create_sequence(normalized_payload)
 
     return {
         "success": True,
-        "data": api_result.get("data"),
-        "raw": api_result,
-        "message": api_result.get("msg", "OK"),
-        "query_time": f"{elapsed:.2f}s",
+        **sequence_result,
     }
 
 
@@ -2859,10 +3624,19 @@ async def batch_delete_products(payload: Dict[str, Any]):
 async def list_templates():
     templates = load_templates()
     templates.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+
+    example_template_id = get_example_template_id()
+    enriched_templates = []
+    for item in templates:
+        record = dict(item)
+        record["is_example"] = bool(example_template_id) and record.get("template_id") == example_template_id
+        enriched_templates.append(record)
+
     return {
         "success": True,
-        "data": templates,
-        "count": len(templates),
+        "data": enriched_templates,
+        "count": len(enriched_templates),
+        "example_template_id": example_template_id,
     }
 
 
@@ -2907,6 +3681,72 @@ async def create_template(payload: Dict[str, Any]):
     }
 
 
+@app.put("/api/templates/{template_id}")
+async def update_template(template_id: str, payload: Dict[str, Any]):
+    templates = load_templates()
+
+    target_index = -1
+    for idx, item in enumerate(templates):
+        if item.get("template_id") == template_id:
+            target_index = idx
+            break
+
+    if target_index < 0:
+        raise HTTPException(status_code=404, detail="模板不存在")
+
+    target = dict(templates[target_index])
+
+    if "name" in payload:
+        name = payload.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise HTTPException(status_code=400, detail="name 为必填")
+        if len(name.strip()) > 80:
+            raise HTTPException(status_code=400, detail="name 长度不能超过 80")
+        target["name"] = name.strip()
+
+    if "description" in payload:
+        description = payload.get("description")
+        if description is not None and not isinstance(description, str):
+            raise HTTPException(status_code=400, detail="description 必须是字符串")
+        target["description"] = (description or "").strip()
+
+    if "source" in payload:
+        target["source"] = str(payload.get("source") or "manual")
+
+    if "template_data" in payload:
+        try:
+            target["template_data"] = normalize_template_data(payload.get("template_data"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    target["updated_at"] = datetime.now().isoformat()
+    templates[target_index] = target
+    save_templates(templates)
+
+    return {
+        "success": True,
+        "data": target,
+        "message": "模板更新成功",
+    }
+
+
+@app.post("/api/templates/{template_id}/example")
+async def set_template_as_example(template_id: str):
+    templates = load_templates()
+    template_record = next((item for item in templates if item.get("template_id") == template_id), None)
+    if not template_record:
+        raise HTTPException(status_code=404, detail="模板不存在")
+
+    set_example_template_id(template_id)
+
+    return {
+        "success": True,
+        "template_id": template_id,
+        "template_name": template_record.get("name") or "",
+        "message": "示例模板设置成功",
+    }
+
+
 @app.delete("/api/templates/{template_id}")
 async def delete_template(template_id: str):
     templates = load_templates()
@@ -2914,6 +3754,9 @@ async def delete_template(template_id: str):
 
     if len(filtered_templates) == len(templates):
         raise HTTPException(status_code=404, detail="模板不存在")
+
+    if get_example_template_id() == template_id:
+        set_example_template_id(None)
 
     save_templates(filtered_templates)
     return {
@@ -3006,4 +3849,4 @@ async def shutdown_event():
 # ── 主程序 ──
 if __name__ == "__main__":
     logger.info("🎯 直接运行模式启动")
-    uvicorn.run(app, host="0.0.0.0", port=BACKEND_PORT, log_level="info")
+    uvicorn.run(app, host=BACKEND_HOST, port=BACKEND_PORT, log_level="info")
