@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Shop {
+  id              Int      @id @default(autoincrement())
+  authorizeId     String   @unique
+  authorizeExpires Int     @default(0)
+  userIdentity    String   @default("")
+  userName        String   @default("")
+  userNick        String   @default("")
+  shopName        String   @default("")
+  serviceSupport  String   @default("")
+  isDepositEnough Boolean  @default(false)
+  isPro           Boolean  @default(false)
+  isValid         Boolean  @default(false)
+  isTrial         Boolean  @default(false)
+  validEndTime    Int      @default(0)
+  itemBizTypes    String   @default("")
+  syncedAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model KamiCategory {
+  id           Int      @id @default(autoincrement())
+  categoryId   String   @unique
+  categoryName String
+  remark       String   @default("")
+  createTime   String   @default("")
+  updateTime   String   @default("")
+  syncedAt     DateTime @default(now())
+}
+
+model KamiKind {
+  id               Int      @id @default(autoincrement())
+  kindId           String   @unique
+  kindName         String
+  kindAlias        String   @default("")
+  kindCategory     String   @default("0")
+  kindCategoryName String   @default("")
+  kindType         Int      @default(1)
+  cost             String   @default("0.00")
+  avgCost          String   @default("0.00")
+  stock            Int      @default(0)
+  sold             Int      @default(0)
+  totalCost        String   @default("0.00")
+  totalStock       Int      @default(0)
+  cardType         Int      @default(1)
+  pwdType          Int      @default(1)
+  cardPrefix       String   @default("")
+  pwdPrefix        String   @default("")
+  prioritySale     Int      @default(1)
+  separator        Int      @default(0)
+  stockWarning     Int      @default(0)
+  sort             Int      @default(0)
+  modifyTime       String   @default("")
+  createTime       String   @default("")
+  syncedAt         DateTime @default(now())
+}
+
+model KamiGroup {
+  id            Int      @id @default(autoincrement())
+  groupId       String   @unique
+  groupName     String
+  groupType     Int      @default(1)
+  status        Int      @default(1)
+  kindGroupJson String   @default("[]")
+  modifyTime    String   @default("")
+  createTime    String   @default("")
+  syncedAt      DateTime @default(now())
+}
+
+model Supplier {
+  id        Int             @id @default(autoincrement())
+  name      String
+  contact   String          @default("")
+  channel   String          @default("")
+  remark    String          @default("")
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  batches   PurchaseBatch[]
+}
+
+model PurchaseBatch {
+  id              Int             @id @default(autoincrement())
+  batchNo         String          @unique
+  supplierId      Int?
+  supplier        Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  kindId          String
+  kindName        String          @default("")
+  quantity        Int
+  unitCostFen     Int
+  totalCostFen    Int
+  pushedToGoofish Boolean         @default(false)
+  goofishSyncMsg  String          @default("")
+  remark          String          @default("")
+  purchasedAt     DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  cards           LocalCardItem[]
+}
+
+model LocalCardItem {
+  id          Int           @id @default(autoincrement())
+  batchId     Int
+  batch       PurchaseBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  kindId      String
+  cardNo      String
+  cardPwd     String
+  unitCostFen Int
+  status      String        @default("IN_STOCK") // IN_STOCK | PUSHED | SOLD | VOID
+  orderNo     String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([kindId, status])
+}
+
+model Product {
+  id               Int      @id @default(autoincrement())
+  productId        String   @unique
+  title            String
+  outerId          String   @default("")
+  productStatus    Int      @default(0)
+  publishStatus    Int      @default(0)
+  itemBizType      Int      @default(0)
+  spBizType        Int      @default(0)
+  channelCatId     String   @default("")
+  priceFen         Int      @default(0)
+  originalPriceFen Int      @default(0)
+  expressFeeFen    Int      @default(0)
+  stock            Int      @default(0)
+  sold             Int      @default(0)
+  stuffStatus      Int      @default(0)
+  skuItemsJson       String   @default("[]")
+  publishShopJson    String   @default("[]")
+  channelPvJson      String   @default("[]")
+  errorMsg           String   @default("")
+  specifyPublishTime String   @default("")
+  linkedKindId       String?
+  linkedGroupId      String?
+  localCostFen       Int?
+  onlineTime       Int      @default(0)
+  offlineTime      Int      @default(0)
+  createTime       Int      @default(0)
+  updateTime       Int      @default(0)
+  syncedAt         DateTime @default(now())
+}
+
+model Order {
+  id                Int      @id @default(autoincrement())
+  orderNo           String   @unique
+  authorizeId       String   @default("")
+  sellerEid         String   @default("")
+  sellerName        String   @default("")
+  buyerEid          String   @default("")
+  buyerNick         String   @default("")
+  orderStatus       Int      @default(0)
+  refundStatus      Int      @default(0)
+  orderType         Int      @default(0)
+  totalAmountFen    Int      @default(0)
+  payAmountFen      Int      @default(0)
+  postFeeFen        Int      @default(0)
+  discountAmountFen Int      @default(0)
+  productId         String   @default("")
+  productTitle      String   @default("")
+  skuId             String   @default("")
+  skuText           String   @default("")
+  buyNum            Int      @default(1)
+  costFen           Int      @default(0)
+  profitFen         Int      @default(0)
+  payTime           Int      @default(0)
+  consignTime       Int      @default(0)
+  confirmTime       Int      @default(0)
+  createTime        Int      @default(0)
+  updateTime        Int      @default(0)
+  rawJson           String   @default("{}")
+  syncedAt          DateTime @default(now())
+}
+
+model RefundOrder {
+  id              Int      @id @default(autoincrement())
+  refundNo        String   @unique
+  orderNo         String
+  sellerEid       String   @default("")
+  sellerName      String   @default("")
+  goodsStatus     Int      @default(0)
+  refundType      Int      @default(0)
+  refundStatus    Int      @default(0)
+  refundAmountFen Int      @default(0)
+  applyAmountFen  Int      @default(0)
+  applyTime       Int      @default(0)
+  refundTime      Int      @default(0)
+  timeoutTime     Int      @default(0)
+  timeoutStatus   Int      @default(0)
+  timeoutType     Int      @default(0)
+  waybillNo       String   @default("")
+  expressCode     String   @default("")
+  rejectTime      Int      @default(0)
+  refundReason    String   @default("")
+  syncedAt        DateTime @default(now())
+
+  @@index([orderNo])
+}
+
+model SyncLog {
+  id         Int      @id @default(autoincrement())
+  action     String
+  target     String   @default("")
+  status     String   @default("SUCCESS")
+  message    String   @default("")
+  detailJson String   @default("{}")
+  createdAt  DateTime @default(now())
+}

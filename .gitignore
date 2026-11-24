@@ -1,0 +1,28 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+
+# database & runtime data
+/prisma/dev.db*
+/data/
+/logs/
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# env files
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+*.pem
+*.log
+*.tsbuildinfo
+next-env.d.ts
